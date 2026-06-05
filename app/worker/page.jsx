@@ -68,6 +68,15 @@ function WorkerPortal({ profile }) {
         </p>
       </div>
 
+      {profile && profile.role === "worker" && !profile.profile_complete && (
+        <div className="glass-card glass-card--accent gate" style={{ marginBottom: "var(--s-5)", maxWidth: 640 }}>
+          <div className="gate__orb" aria-hidden="true">⚙️</div>
+          <h3>Finish setting up your profile</h3>
+          <p className="muted" style={{ marginTop: "var(--s-2)" }}>You won't appear in the marketplace or get matched until you add your wallet, rate and availability.</p>
+          <a href="/profile/setup" className="btn btn-primary" style={{ marginTop: "var(--s-4)" }}>Complete profile →</a>
+        </div>
+      )}
+
       {selected ? (
         <ProofForm job={selected} onBack={() => setSelected(null)} onDone={() => { setSelected(null); load(); }} />
       ) : jobs === null ? (

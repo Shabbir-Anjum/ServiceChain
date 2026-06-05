@@ -20,6 +20,7 @@ export default function Nav() {
   // Role-aware links.
   const links = [{ href: "/", label: "Home" }];
   if (role === "worker") links.push({ href: "/worker", label: "My jobs" });
+  if (role === "worker") links.push({ href: "/profile/setup", label: "Profile" });
   if (user) links.push({ href: "/dashboard", label: "Dashboard" });
   if (role === "admin") links.push({ href: "/admin", label: "Admin" });
 

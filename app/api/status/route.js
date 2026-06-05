@@ -7,7 +7,7 @@ import { getAuth } from "../../../lib/auth";
 function canSee(rec, profile) {
   if (!profile) return false;
   if (profile.role === "admin") return true;
-  if (profile.role === "worker") return rec.workerId === profile.worker_id;
+  if (profile.role === "worker") return rec.workerId === profile.id; // worker_id = auth uid
   return rec.clientId === profile.id; // client
 }
 
@@ -27,7 +27,7 @@ export async function GET(req) {
   const jobs = await store.forUser({
     role: profile.role,
     userId: profile.id,
-    workerId: profile.worker_id,
+    workerId: profile.id, // a worker's jobs are worker_id = their own auth uid
   });
   return NextResponse.json({ jobs, role: profile.role });
 }

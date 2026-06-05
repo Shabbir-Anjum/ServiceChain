@@ -15,8 +15,8 @@ export async function POST(req) {
     if (!rec) return NextResponse.json({ error: "job not found" }, { status: 404 });
     if (!rec.job) return NextResponse.json({ error: "job not started" }, { status: 400 });
 
-    // Workers may only settle jobs assigned to their worker profile.
-    if (auth.profile.role === "worker" && rec.workerId !== auth.profile.worker_id) {
+    // Workers may only settle jobs assigned to them (worker_id = their auth uid).
+    if (auth.profile.role === "worker" && rec.workerId !== auth.profile.id) {
       return NextResponse.json({ error: "This job is not assigned to you." }, { status: 403 });
     }
     if (rec.status === "paid" || rec.status === "refunded") {

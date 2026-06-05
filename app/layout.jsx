@@ -3,9 +3,30 @@ import Nav from "./Nav";
 import AuthProvider from "./AuthProvider";
 
 export const metadata = {
-  title: "ServiceChain · AI Service Marketplace on Somnia",
+  title: {
+    default: "ServiceChain — AI Service Marketplace on Somnia",
+    template: "%s · ServiceChain",
+  },
   description:
     "AI agents that hire, pay & verify service work autonomously — with on-chain escrow and immutable proof on Somnia.",
+  applicationName: "ServiceChain",
+  keywords: ["AI agents", "Somnia", "blockchain", "escrow", "service marketplace", "on-chain payments", "Web3"],
+  authors: [{ name: "ServiceChain" }],
+  openGraph: {
+    title: "ServiceChain — AI Service Marketplace on Somnia",
+    description: "Autonomous AI agents that hire, pay & verify service work on-chain.",
+    type: "website",
+    siteName: "ServiceChain",
+  },
+  twitter: {
+    card: "summary",
+    title: "ServiceChain — AI Service Marketplace on Somnia",
+    description: "Autonomous AI agents that hire, pay & verify service work on-chain.",
+  },
+};
+
+export const viewport = {
+  themeColor: "#0c0a16",
 };
 
 export default function RootLayout({ children }) {

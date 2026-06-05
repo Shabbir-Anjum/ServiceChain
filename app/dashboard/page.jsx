@@ -9,20 +9,10 @@ export default function Dashboard() {
   const [stale, setStale] = useState(false);
   const last = useRef([]);
 
-  if (!loading && !user) {
-    return (
-      <section className="container section">
-        <div className="glass-card glass-card--accent gate">
-          <div className="gate__orb" aria-hidden="true">🔐</div>
-          <h3>Log in to see your dashboard</h3>
-          <p className="muted" style={{ marginTop: "var(--s-2)" }}>Clients see their own jobs, workers see assigned jobs, admins see everything.</p>
-          <a href="/login?next=/dashboard" className="btn btn-primary" style={{ marginTop: "var(--s-4)" }}>Log in / Sign up →</a>
-        </div>
-      </section>
-    );
-  }
-
+  // Only poll while signed in. Hooks must run unconditionally (before any early
+  // return) or React throws "rendered fewer hooks than expected" on logout.
   useEffect(() => {
+    if (!user) return;
     let alive = true;
     const tick = async () => {
       try {
@@ -41,7 +31,20 @@ export default function Dashboard() {
     tick();
     const id = setInterval(tick, 3000);
     return () => { alive = false; clearInterval(id); };
-  }, []);
+  }, [user]);
+
+  if (!loading && !user) {
+    return (
+      <section className="container section">
+        <div className="glass-card glass-card--accent gate">
+          <div className="gate__orb" aria-hidden="true">🔐</div>
+          <h3>Log in to see your dashboard</h3>
+          <p className="muted" style={{ marginTop: "var(--s-2)" }}>Clients see their own jobs, workers see assigned jobs, admins see everything.</p>
+          <a href="/login?next=/dashboard" className="btn btn-primary" style={{ marginTop: "var(--s-4)" }}>Log in / Sign up →</a>
+        </div>
+      </section>
+    );
+  }
 
   const totals = aggregate(jobs || []);
 

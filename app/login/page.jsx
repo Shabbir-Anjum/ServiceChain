@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "../../lib/supabase/client";
 
@@ -21,18 +21,14 @@ function LoginInner() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState("client");
-  const [workerId, setWorkerId] = useState("");
-  const [workers, setWorkers] = useState([]);
+  const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
 
   const next = params.get("next") || "/dashboard";
-
-  // Load worker profiles for the signup dropdown.
-  useEffect(() => {
-    fetch("/api/workers").then((r) => r.json()).then((d) => setWorkers(d.workers || [])).catch(() => {});
-  }, []);
+  // Workers go set up their profile first; clients go to their destination.
+  const dest = role === "worker" ? "/profile/setup" : next;
 
   async function submit(e) {
     e.preventDefault();
@@ -44,16 +40,15 @@ function LoginInner() {
         router.push(next);
         router.refresh();
       } else {
-        if (role === "worker" && !workerId) throw new Error("Please choose your worker profile.");
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName, role, worker_id: role === "worker" ? workerId : "" } },
+          options: { data: { full_name: fullName, role } },
         });
         if (error) throw error;
         // If email confirmation is off, a session is returned immediately.
         if (data.session) {
-          router.push(next);
+          router.push(dest);
           router.refresh();
         } else {
           setNotice("Account created. If email confirmation is on, check your inbox — otherwise just log in.");
@@ -97,18 +92,6 @@ function LoginInner() {
                   <RoleCard active={role === "worker"} onClick={() => setRole("worker")} emoji="🛠️" title="Worker" desc="Get hired & paid" />
                 </div>
               </div>
-              {role === "worker" && (
-                <div className="field">
-                  <label className="label" htmlFor="workerId">Your worker profile</label>
-                  <select id="workerId" className="input" value={workerId} onChange={(e) => setWorkerId(e.target.value)}>
-                    <option value="">Select your profile…</option>
-                    {workers.map((w) => (
-                      <option key={w.id} value={w.id}>{w.emoji} {w.name} — {w.role} ({w.location})</option>
-                    ))}
-                  </select>
-                  <p className="hint">Pick the marketplace profile that's you. Jobs matched to it will appear in your portal.</p>
-                </div>
-              )}
             </>
           )}
 
@@ -118,7 +101,22 @@ function LoginInner() {
           </div>
           <div className="field">
             <label className="label" htmlFor="password">Password</label>
-            <input id="password" type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
+            <div className="pw-wrap">
+              <input id="password" type={showPw ? "text" : "password"} className="input pw-input" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
+              <button type="button" className="pw-toggle" onClick={() => setShowPw((v) => !v)} aria-label={showPw ? "Hide password" : "Show password"} aria-pressed={showPw} title={showPw ? "Hide password" : "Show password"}>
+                {showPw ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
 
           {error && <div className="pill is-danger"><span aria-hidden="true">⚠</span> {error}</div>}

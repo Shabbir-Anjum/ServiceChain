@@ -292,6 +292,19 @@ h3 { font-size: clamp(1.15rem, 2vw, 1.4rem); }
 }
 .textarea { min-height: 120px; resize: vertical; line-height: 1.5; }
 
+/* Password field with show/hide toggle */
+.pw-wrap { position: relative; }
+.pw-input { padding-right: 46px; }
+.pw-toggle {
+  position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
+  display: grid; place-items: center;
+  width: 32px; height: 32px;
+  border: 0; background: transparent; color: var(--text-muted);
+  border-radius: var(--r-sm); cursor: pointer;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.pw-toggle:hover { color: var(--violet-400); background: var(--glass); }
+
 /* ── Chips (skill tags) ── */
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
@@ -462,6 +475,12 @@ select.input { appearance: none; cursor: pointer; }
 /* ── Auth gate / notice cards ── */
 .gate { max-width: 480px; margin: 0 auto; text-align: center; }
 .gate__orb { width: 72px; height: 72px; margin: 0 auto var(--s-4); border-radius: 50%; display: grid; place-items: center; font-size: 1.8rem; color: var(--violet-400); background: var(--grad-aurora-soft); border: 1px solid var(--border-violet); }
+
+/* ── Profile setup ── */
+.emoji-pick { width: 44px; height: 44px; font-size: 1.3rem; display: grid; place-items: center; border-radius: var(--r-md); border: 1px solid var(--border-strong); background: var(--glass); cursor: pointer; transition: all var(--t-fast); }
+.emoji-pick:hover { border-color: var(--border-violet); }
+.emoji-pick.is-active { border-color: var(--violet); background: var(--tint-violet); box-shadow: var(--glow-violet); }
+.chip--on { color: var(--violet-400); border-color: var(--border-violet); background: var(--tint-violet); }
 
 /* ── Admin ── */
 .admin__grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-5); align-items: start; }
