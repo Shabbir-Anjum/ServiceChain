@@ -84,7 +84,7 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="job-grid">
-          {jobs.map((j) => <JobCard key={j.uuid} job={j} />)}
+          {jobs.map((j) => <JobCard key={j.uuid} job={j} role={profile?.role} />)}
         </div>
       )}
     </section>
@@ -102,8 +102,28 @@ function Tile({ label, value, suffix, accent }) {
   );
 }
 
-function JobCard({ job }) {
+function JobCard({ job, role }) {
   const pill = STATUS_PILL[job.status] || { cls: "is-info", label: job.status };
+  const [deciding, setDeciding] = useState(null); // 'approve' | 'dispute'
+  const [decided, setDecided] = useState(null);
+  const [err, setErr] = useState(null);
+
+  // The client (or admin) can review + decide when proof is submitted.
+  const canDecide = (role === "client" || role === "admin") && job.status === "proof_submitted" && !decided;
+
+  async function decide(decision) {
+    setDeciding(decision); setErr(null);
+    try {
+      const r = await fetch("/api/job/decision", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uuid: job.uuid, decision }),
+      });
+      const d = await r.json();
+      if (d.error) { setErr(d.error); setDeciding(null); }
+      else setDecided(d.approved ? "approved" : "disputed");
+    } catch (e) { setErr(String(e)); setDeciding(null); }
+  }
+
   return (
     <article className="glass-card job">
       <div className="job__head">
@@ -119,6 +139,39 @@ function JobCard({ job }) {
         </div>
         <span className={`pill ${pill.cls}`} style={{ flex: "none" }}>{pill.label}</span>
       </div>
+
+      {/* Proof review + client decision */}
+      {job.status === "proof_submitted" && (
+        <div className="proof-review">
+          {job.proofPhotoUrl ? (
+            <a href={job.proofPhotoUrl} target="_blank" rel="noreferrer" className="proof-photo">
+              <img src={job.proofPhotoUrl} alt="proof of work" />
+            </a>
+          ) : (
+            <div className="pill is-pending" style={{ fontSize: ".72rem" }}>⚠ No photo evidence</div>
+          )}
+          {job.proofText && <p className="muted" style={{ fontSize: ".9rem", marginTop: "var(--s-2)" }}>“{job.proofText}”</p>}
+          {job.aiCheck && (
+            <div className="ai-advisory">
+              <span aria-hidden="true">👁️</span> AI pre-check: {job.aiCheck.looksConsistent === true ? "looks consistent" : job.aiCheck.looksConsistent === false ? "couldn't confirm" : "n/a"}
+              {job.aiCheck.notes ? ` — ${job.aiCheck.notes}` : ""}
+            </div>
+          )}
+          {canDecide && (
+            <div className="row gap-2" style={{ marginTop: "var(--s-3)" }}>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => decide("approve")} disabled={!!deciding}>
+                {deciding === "approve" ? <span className="spinner" /> : "✓ Approve & pay"}
+              </button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => decide("dispute")} disabled={!!deciding}>
+                {deciding === "dispute" ? <span className="spinner" /> : "✕ Dispute"}
+              </button>
+            </div>
+          )}
+          {!canDecide && role === "worker" && <p className="hint" style={{ marginTop: "var(--s-2)" }}>Awaiting the client's approval.</p>}
+          {decided && <div className={`pill ${decided === "approved" ? "is-success" : "is-danger"}`} style={{ marginTop: "var(--s-2)" }}>{decided === "approved" ? "Payment released" : "Refunded"}</div>}
+          {err && <div className="pill is-danger" style={{ marginTop: "var(--s-2)" }}>{err}</div>}
+        </div>
+      )}
 
       <ol className="timeline">
         {(job.steps || []).map((s, i) => {

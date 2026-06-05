@@ -482,6 +482,17 @@ select.input { appearance: none; cursor: pointer; }
 .emoji-pick.is-active { border-color: var(--violet); background: var(--tint-violet); box-shadow: var(--glow-violet); }
 .chip--on { color: var(--violet-400); border-color: var(--border-violet); background: var(--tint-violet); }
 
+/* ── Proof upload (worker) ── */
+.uploader { display: block; border: 1px dashed var(--border-strong); border-radius: var(--r-md); cursor: pointer; overflow: hidden; transition: border-color var(--t-fast); }
+.uploader:hover { border-color: var(--border-violet); }
+.uploader__placeholder { display: flex; align-items: center; justify-content: center; gap: var(--s-2); padding: var(--s-6); color: var(--text-muted); font-size: 0.9rem; }
+.uploader__preview { width: 100%; max-height: 220px; object-fit: cover; display: block; }
+
+/* ── Proof review + client decision (dashboard) ── */
+.proof-review { margin-top: var(--s-3); padding: var(--s-3); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--glass); }
+.proof-photo img { width: 100%; max-height: 240px; object-fit: cover; border-radius: var(--r-sm); display: block; }
+.ai-advisory { margin-top: var(--s-2); font-size: 0.82rem; color: var(--text-2); background: var(--tint-cyan); border: 1px solid rgba(34,211,238,0.25); border-radius: var(--r-sm); padding: 8px 10px; }
+
 /* ── Admin ── */
 .admin__grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-5); align-items: start; }
 @media (max-width: 880px) { .admin__grid { grid-template-columns: 1fr; } }
