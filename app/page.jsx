@@ -220,17 +220,24 @@ function HireFlow({ examples }) {
       if (d.error) { setChat((c) => [...c, { role: "agent", text: "Sorry — " + d.error }]); }
       else {
         setChat((c) => [...c, { role: "agent", text: d.reply }]);
-        if (d.action === "confirm" && d.confirmWorkerId) {
-          // The agent detected acceptance — confirm that worker.
-          confirm(d.confirmWorkerId);
+        if (d.action === "recommend" && d.newWorker) {
+          // Agent swapped to a different worker from the pool — show it as the top pick.
+          setPrimary(d.newWorker);
+        } else if (d.action === "confirm" && d.confirmWorkerId) {
+          // The agent detected acceptance — confirm that worker (could be the swapped one).
+          confirm(d.confirmWorkerId, d.newWorker);
         }
       }
     } catch (err) { setChat((c) => [...c, { role: "agent", text: "Network error. Try again." }]); }
     finally { setChatBusy(false); }
   }
 
-  async function confirm(workerId) {
-    const w = workerId === alternative?.id ? alternative : primary;
+  async function confirm(workerId, swapped) {
+    // Resolve the chosen worker from whichever of the three slots matches.
+    const w = swapped && swapped.id === workerId ? swapped
+      : workerId === alternative?.id ? alternative
+      : workerId === primary?.id ? primary
+      : { id: workerId };
     setStage("confirming"); setError(null);
     try {
       const r = await fetch("/api/job/confirm", {
@@ -288,10 +295,10 @@ function HireFlow({ examples }) {
           <div className="result__worker glass-card">
             <div className="wkr__avatar" aria-hidden="true">{confirmed.worker.emoji || confirmed.worker.name?.[0]}</div>
             <div className="stack"><strong>{confirmed.worker.name}</strong><span className="dim" style={{ fontSize: ".85rem" }}>{confirmed.worker.role}</span></div>
-            <span className="pill is-success" style={{ marginLeft: "auto" }}><span className="mono">{confirmed.amount} STT</span></span>
+            {confirmed.quotedPrice != null && <span className="pill is-success" style={{ marginLeft: "auto" }}><span className="mono">${confirmed.quotedPrice}</span></span>}
           </div>
           <div className="row gap-2 wrap" style={{ marginTop: "var(--s-3)" }}>
-            {confirmed.escrowTx?.url && <a className="tx-pill" href={confirmed.escrowTx.url} target="_blank" rel="noreferrer">🔒 Escrow tx ↗</a>}
+            {confirmed.escrowTx?.url && <a className="tx-pill" href={confirmed.escrowTx.url} target="_blank" rel="noreferrer">🔒 Escrow secured ↗</a>}
             {confirmed.emailed && <span className="pill is-info">📧 Worker emailed</span>}
           </div>
           <div className="result__actions">
@@ -358,10 +365,15 @@ function HireFlow({ examples }) {
 
 function agentIntro(d) {
   const p = d.primary;
-  if (!p) return "I couldn't find a great match — try rephrasing your request.";
-  let s = `I recommend ${p.name} (${p.role}) for this — ${p.why || "a strong fit"}. Quote: ${p.quotedPrice} STT.`;
-  if (d.alternative) s += ` If budget's tight, ${d.alternative.name} is a cheaper option at ${d.alternative.quotedPrice} STT.`;
-  s += " Want to go ahead, or have questions about price or quality?";
+  const j = d.job || {};
+  if (!p) return "I couldn't find a great match for that — could you rephrase what you need?";
+  const what = j.summary ? `Got it — ${j.summary.toLowerCase()}` : "Got it";
+  const ctx = [j.category, j.urgency && `${j.urgency} priority`, j.location].filter(Boolean).join(", ");
+  let s = `${what}${ctx ? ` (${ctx})` : ""}. `;
+  s += `My top recommendation is ${p.name}, a ${p.rating}★ ${p.role}${p.location ? ` based in ${p.location}` : ""} with ${p.jobsDone} jobs completed — ${p.why || "a strong fit for this"}. `;
+  s += `Their quote for this job is $${p.quotedPrice}. `;
+  if (d.alternative) s += `If you'd prefer something cheaper, ${d.alternative.name} can do it for $${d.alternative.quotedPrice}. `;
+  s += `Payment is held safely in escrow and only released once the work is verified. Want to go ahead, see other options, or ask me anything?`;
   return s;
 }
 
@@ -384,7 +396,7 @@ function RecCard({ worker, badge, subtle, onConfirm, busy }) {
         {(worker.highlights || []).map((h, i) => <span className="chip" key={i}>{h}</span>)}
       </div>
       <div className="row gap-3" style={{ justifyContent: "space-between", marginTop: "var(--s-3)", alignItems: "center" }}>
-        <span className="mono" style={{ fontSize: "1.1rem", fontWeight: 700 }}>{worker.quotedPrice} STT</span>
+        <span className="mono" style={{ fontSize: "1.2rem", fontWeight: 700 }}>${worker.quotedPrice}</span>
         <button type="button" className={`btn ${subtle ? "btn-secondary" : "btn-primary"} btn-sm`} onClick={onConfirm} disabled={busy}>
           {busy ? <span className="spinner" /> : `Hire ${worker.name?.split(" ")[0]}`}
         </button>

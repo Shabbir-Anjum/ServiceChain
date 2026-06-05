@@ -41,7 +41,7 @@ async function sendJobEmail(p) {
       location: esc(p.job.location),
       fullRequestText: esc(p.job.fullRequestText),
     },
-    quotedPrice: esc(p.quotedPrice != null ? `${p.quotedPrice} STT` : "—"),
+    quotedPrice: esc(p.quotedPrice != null ? `$${p.quotedPrice}` : "—"),
     escrow: {
       amountSTT: esc(p.escrow?.amountSTT ?? ""),
       txUrl: p.escrow?.txUrl || "",

@@ -46,7 +46,8 @@ export async function POST(req) {
     return NextResponse.json({
       uuid,
       worker: workerSnapshot,
-      amount: result.amount,
+      amount: result.amount,            // internal STT escrow amount
+      quotedPrice: worker.quotedPrice,  // USD quote shown to the client
       escrowTx: result.escrowTx,
       emailed: result.email?.ok || false,
     });

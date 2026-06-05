@@ -6,7 +6,7 @@
 // Every decision + tx is logged to Supabase (if configured) and returned for the dashboard.
 const { parseJob } = require("./parseJob");
 const { recommendWorkers } = require("./recommend");
-const { verifyProof } = require("./verifyProof");
+const { visionCheck } = require("./visionCheck");
 const { sendJobEmail } = require("./notify");
 const { lockEscrow, releasePayment, refundClient, recordProof } = require("./executor");
 const { supabase } = require("../lib/supabase");
@@ -84,19 +84,35 @@ async function confirmJob(jobUuid, job, worker, meta = {}) {
 }
 
 /**
- * Phase B — runs when the worker submits proof of completion.
+ * Phase B1 — the WORKER submits proof (photo + note). NO funds move here.
+ * Runs an AI vision pre-check (advisory only) and records the submission.
  * @param {string} jobUuid
- * @param {object} job - the parsed job from startJob
- * @param {string} proofText - worker's completion evidence (text)
+ * @param {object} job - parsed job
+ * @param {string} proofText - worker's note
+ * @param {string|null} photoUrl - public proof image URL (or null)
  */
-async function settleJob(jobUuid, job, proofText) {
+async function submitProof(jobUuid, job, proofText, photoUrl) {
   const steps = [];
+  const ai = await visionCheck(job, proofText, photoUrl);
+  steps.push(await log(jobUuid, "proof_submitted", { hasPhoto: !!photoUrl, note: proofText }));
+  steps.push(await log(jobUuid, "ai_prechecked", ai));
+  return { ai, steps };
+}
 
-  const verdict = await verifyProof(job, proofText);
-  steps.push(await log(jobUuid, "verified", verdict));
+/**
+ * Phase B2 — the CLIENT decides. This is the ONLY path that moves funds.
+ * approve -> release payment to worker; dispute -> refund client. Then record proof.
+ * @param {string} jobUuid
+ * @param {object} job - parsed job
+ * @param {('approve'|'dispute')} decision
+ * @param {string} proofText - the worker's note (for the on-chain proof hash)
+ */
+async function clientDecision(jobUuid, job, decision, proofText) {
+  const steps = [];
+  const approved = decision === "approve";
 
   let settleTx;
-  if (verdict.decision === "approved") {
+  if (approved) {
     settleTx = await releasePayment(jobUuid);
     steps.push(await log(jobUuid, "payment_released", settleTx));
   } else {
@@ -104,10 +120,10 @@ async function settleJob(jobUuid, job, proofText) {
     steps.push(await log(jobUuid, "client_refunded", settleTx));
   }
 
-  const proofTx = await recordProof(jobUuid, proofText, verdict.decision);
+  const proofTx = await recordProof(jobUuid, proofText || "", approved ? "approved" : "disputed");
   steps.push(await log(jobUuid, "proof_recorded", proofTx));
 
-  return { verdict, settleTx, proofTx, steps };
+  return { approved, settleTx, proofTx, steps };
 }
 
-module.exports = { recommendJob, confirmJob, settleJob, log };
+module.exports = { recommendJob, confirmJob, submitProof, clientDecision, log };

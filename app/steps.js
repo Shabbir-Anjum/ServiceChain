@@ -23,18 +23,21 @@ export const PIPELINE = [
   { icon: "📜", label: "Proof" },
 ];
 
-// Add recommend/match/email steps to the canonical map for the timeline.
+// Add recommend/match/email/proof steps to the canonical map for the timeline.
 export const STEP_MAP = Object.fromEntries([
   ...STEPS,
   { key: "recommended", icon: "🎯", label: "Recommended worker", status: "info" },
   { key: "worker_emailed", icon: "📧", label: "Worker emailed", status: "info" },
+  { key: "proof_submitted", icon: "📸", label: "Proof submitted", status: "info" },
+  { key: "ai_prechecked", icon: "👁️", label: "AI pre-check", status: "info" },
 ].map((s) => [s.key, s]));
 
-// Map a job status -> pill variant + label.
+// Map a job status -> pill variant + label. (Worker-facing label differs.)
 export const STATUS_PILL = {
-  created:       { cls: "is-info",    label: "Created" },
-  recommending:  { cls: "is-info",    label: "Choosing worker" },
-  escrow_locked: { cls: "is-violet",  label: "Escrow locked" },
-  paid:          { cls: "is-success", label: "Paid" },
-  refunded:      { cls: "is-danger",  label: "Refunded" },
+  created:        { cls: "is-info",    label: "Created" },
+  recommending:   { cls: "is-info",    label: "Choosing worker" },
+  escrow_locked:  { cls: "is-violet",  label: "In progress" },
+  proof_submitted:{ cls: "is-pending", label: "Awaiting approval" },
+  paid:           { cls: "is-success", label: "Paid" },
+  refunded:       { cls: "is-danger",  label: "Refunded" },
 };

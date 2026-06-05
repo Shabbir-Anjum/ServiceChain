@@ -27,11 +27,11 @@ PITCH WRITING
 - Do not fabricate any number; use only values present in the worker objects.
 
 QUOTING
-- "quotedPrice" is a fair STT quote for THIS job, not an hourly rate. Estimate effort from the job's urgency and category, multiply by hourlyRate, and keep it close to estimatedBudgetSTT when that is provided. Round to 2 decimals. This quote is independent of the on-chain escrow amount.
+- "quotedPrice" is a fair quote in US DOLLARS (USD) for THIS whole job, not an hourly rate. Estimate the hours this job needs from its urgency/category, multiply by the worker's hourlyRate (treat hourlyRate as USD/hour), add a little for urgency. Typical small home jobs land between $20 and $200. Return a whole-dollar number (no cents, no currency symbol — just the number).
 
 OUTPUT SHAPE (return exactly this shape)
 {"primary":{"workerId":"","why":"","highlights":[""],"quotedPrice":0},"alternative":{"workerId":"","why":"","highlights":[""],"quotedPrice":0}}
-Set "alternative" to null when not applicable. workerId must exactly match an id from the pool. Return JSON only.`;
+"quotedPrice" is a USD number. Set "alternative" to null when not applicable. workerId must exactly match an id from the pool. Return JSON only.`;
 
 /**
  * @param {object} job - parsed job
@@ -66,7 +66,7 @@ async function recommendWorkers(job, workers) {
   if (!primary) {
     const sorted = [...workers].filter((w) => w.available).sort((a, b) => b.rating - a.rating);
     const w = sorted[0] || workers[0];
-    if (w) primary = { ...w, why: `Top-rated ${w.role} for your job`, highlights: [`${w.rating}★ · ${w.jobsDone} jobs`], quotedPrice: w.hourlyRate || job.estimatedBudgetSTT || 1 };
+    if (w) primary = { ...w, why: `Top-rated ${w.role} for your job`, highlights: [`${w.rating}★ · ${w.jobsDone} jobs`], quotedPrice: Math.max(20, Math.round((w.hourlyRate || 20) * 3)) };
   }
   return { primary, alternative, raw };
 }

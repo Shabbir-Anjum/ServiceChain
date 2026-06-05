@@ -128,18 +128,38 @@ function WorkerPortal({ profile }) {
 
 function ProofForm({ job, onBack, onDone }) {
   const [proof, setProof] = useState("");
-  const [phase, setPhase] = useState("idle");
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [phase, setPhase] = useState("idle"); // idle | uploading | submitting | done | error
   const [res, setRes] = useState(null);
+
+  function pickFile(e) {
+    const f = e.target.files?.[0];
+    if (!f) { setFile(null); setPreview(null); return; }
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+  }
 
   async function submit(e) {
     e.preventDefault();
     if (!proof.trim()) return;
-    setPhase("running"); setRes(null);
+    setRes(null);
     try {
+      let photoUrl = null;
+      if (file) {
+        setPhase("uploading");
+        const fd = new FormData();
+        fd.append("uuid", job.uuid);
+        fd.append("file", file);
+        const ur = await fetch("/api/proof/upload", { method: "POST", body: fd });
+        const ud = await ur.json();
+        if (ud.error) { setRes({ error: "Photo upload failed: " + ud.error }); setPhase("error"); return; }
+        photoUrl = ud.url;
+      }
+      setPhase("submitting");
       const r = await fetch("/api/proof", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uuid: job.uuid, proofText: proof }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uuid: job.uuid, proofText: proof, photoUrl }),
       });
       const d = await r.json();
       if (d.error) { setRes(d); setPhase("error"); }
@@ -147,60 +167,66 @@ function ProofForm({ job, onBack, onDone }) {
     } catch (err) { setRes({ error: String(err) }); setPhase("error"); }
   }
 
-  const approved = res?.verdict?.decision === "approved";
-  const confidence = Math.round((res?.verdict?.confidence || 0) * 100);
+  const busy = phase === "uploading" || phase === "submitting";
 
   return (
     <div className="worker__grid">
-      <form className="glass-card glass-card--accent" onSubmit={submit} aria-busy={phase === "running"}>
+      <form className="glass-card glass-card--accent" onSubmit={submit} aria-busy={busy}>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onBack} style={{ marginBottom: "var(--s-3)" }}>← Back to jobs</button>
         <h3>{job.job?.summary || job.requestText}</h3>
-        <p className="muted" style={{ margin: "var(--s-2) 0 var(--s-4)" }}>{job.requestText} · <span className="mono">{job.amount} STT</span> in escrow</p>
+        <p className="muted" style={{ margin: "var(--s-2) 0 var(--s-4)" }}>{job.requestText}</p>
+
         <div className="field">
-          <label className="label" htmlFor="proof">Proof of completion</label>
-          <textarea id="proof" className="textarea" placeholder="Describe exactly what you did, parts used, and how you tested it…" value={proof} onChange={(e) => setProof(e.target.value)} disabled={phase === "running"} rows={5} />
-          <p className="hint">Tip: be specific. “Replaced the U-bend, sealed the joint, ran water 5 min — no leaks.”</p>
+          <label className="label">Photo evidence <span className="dim">(recommended)</span></label>
+          <label className="uploader">
+            {preview ? (
+              <img src={preview} alt="proof preview" className="uploader__preview" />
+            ) : (
+              <span className="uploader__placeholder"><span aria-hidden="true">📷</span> Tap to add a before/after photo</span>
+            )}
+            <input type="file" accept="image/*" capture="environment" onChange={pickFile} disabled={busy} hidden />
+          </label>
+          {!file && <p className="hint">No photo? You can still submit, but the client sees stronger evidence with one.</p>}
         </div>
-        <button type="submit" className="btn btn-primary btn-block btn-lg" style={{ marginTop: "var(--s-4)" }} disabled={phase === "running" || !proof.trim()}>
-          {phase === "running" ? <><span className="spinner" /> Agent verifying…</> : "Submit proof"}
+
+        <div className="field" style={{ marginTop: "var(--s-3)" }}>
+          <label className="label" htmlFor="proof">What did you do?</label>
+          <textarea id="proof" className="textarea" placeholder="Describe the work, parts used, and how you tested it…" value={proof} onChange={(e) => setProof(e.target.value)} disabled={busy} rows={4} />
+        </div>
+
+        <button type="submit" className="btn btn-primary btn-block btn-lg" style={{ marginTop: "var(--s-4)" }} disabled={busy || !proof.trim()}>
+          {phase === "uploading" ? <><span className="spinner" /> Uploading photo…</> : phase === "submitting" ? <><span className="spinner" /> Submitting…</> : "Submit for client approval"}
         </button>
+        <p className="hint center" style={{ marginTop: "var(--s-3)" }}>Your payment is released once the client approves the work.</p>
       </form>
 
       <div className="glass-card worker__result" role="status" aria-live="polite">
-        {phase === "idle" && <div className="postresult__empty"><div className="postresult__orb" aria-hidden="true">🔍</div><p className="muted center">The agent's verdict and on-chain settlement will appear here.</p></div>}
-        {phase === "running" && <div className="postresult__empty"><span className="spinner" style={{ width: 28, height: 28 }} /><p className="muted center">Verifying your proof…</p></div>}
+        {phase === "idle" && <div className="postresult__empty"><div className="postresult__orb" aria-hidden="true">📨</div><p className="muted center">Submit your proof — the client reviews it and releases your payment.</p></div>}
+        {busy && <div className="postresult__empty"><span className="spinner" style={{ width: 28, height: 28 }} /><p className="muted center">{phase === "uploading" ? "Uploading photo…" : "Submitting your proof…"}</p></div>}
         {phase === "done" && res && (
           <div className="animate-in stack gap-4">
-            <div className={`verdict ${approved ? "verdict--ok" : "verdict--no"}`}>
-              <ConfidenceRing value={confidence} ok={approved} />
+            <div className="verdict verdict--ok">
+              <div className="postresult__orb" aria-hidden="true" style={{ width: 56, height: 56, fontSize: "1.4rem" }}>✓</div>
               <div className="stack gap-1">
-                <span className={`pill ${approved ? "is-success" : "is-danger"}`}>{approved ? "✓ Approved" : "✕ Rejected"}</span>
-                <strong style={{ fontSize: "1.1rem" }}>{approved ? "Payment released" : "Client refunded"}</strong>
+                <span className="pill is-pending"><span className="dot" aria-hidden="true" /> Awaiting client approval</span>
+                <strong style={{ fontSize: "1.05rem" }}>Proof submitted</strong>
               </div>
             </div>
-            {res.verdict?.reason && <div className="glass-card verdict__reason"><span className="dim" style={{ fontSize: ".78rem", textTransform: "uppercase", letterSpacing: ".06em" }}>Agent reasoning</span><p className="muted" style={{ marginTop: 4 }}>{res.verdict.reason}</p></div>}
-            <div className="stack gap-2">
-              {res.settleTx?.url && <a className="tx-pill" href={res.settleTx.url} target="_blank" rel="noreferrer">{approved ? "💸 Payment tx ↗" : "↩️ Refund tx ↗"}</a>}
-              {res.proofTx?.url && <a className="tx-pill" href={res.proofTx.url} target="_blank" rel="noreferrer">📜 Proof recorded tx ↗</a>}
-            </div>
+            {res.ai && (
+              <div className="glass-card verdict__reason">
+                <span className="dim" style={{ fontSize: ".78rem", textTransform: "uppercase", letterSpacing: ".06em" }}>👁️ AI pre-check (advisory)</span>
+                <p className="muted" style={{ marginTop: 4 }}>
+                  {res.ai.looksConsistent === true ? "Looks consistent with the job. " : res.ai.looksConsistent === false ? "Couldn't confirm from the evidence. " : ""}
+                  {res.ai.notes}
+                </p>
+              </div>
+            )}
+            <p className="muted" style={{ fontSize: ".9rem" }}>The client has been notified. Once they approve, the escrowed payment is released to your wallet automatically.</p>
             <button type="button" className="btn btn-secondary btn-sm" onClick={onDone}>Back to my jobs →</button>
           </div>
         )}
         {phase === "error" && <div className="animate-in"><div className="pill is-danger"><span aria-hidden="true">⚠</span> {res?.error || "Something went wrong"}</div><button type="button" className="btn btn-ghost btn-sm" onClick={() => setPhase("idle")} style={{ marginTop: "var(--s-3)" }}>Try again</button></div>}
       </div>
     </div>
-  );
-}
-
-function ConfidenceRing({ value, ok }) {
-  const r = 26, c = 2 * Math.PI * r;
-  const off = c - (value / 100) * c;
-  const color = ok ? "var(--success)" : "var(--danger)";
-  return (
-    <svg width="72" height="72" viewBox="0 0 72 72" role="img" aria-label={`Agent confidence ${value}%`} className="ring">
-      <circle cx="36" cy="36" r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="6" />
-      <circle cx="36" cy="36" r={r} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} transform="rotate(-90 36 36)" style={{ transition: "stroke-dashoffset 700ms var(--t-slow)" }} />
-      <text x="36" y="40" textAnchor="middle" fill="var(--text)" fontSize="15" fontWeight="700" fontFamily="var(--font-mono)">{value}%</text>
-    </svg>
   );
 }
