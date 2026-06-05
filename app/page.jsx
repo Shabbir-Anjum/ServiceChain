@@ -128,70 +128,24 @@ function Stat({ label, value, accent }) {
   );
 }
 
-/* ──────────────────── Post a job (live) ──────────────────── */
-const RUN_STEPS = [
-  { key: "parsed", icon: "🧠", label: "Parsing request" },
-  { key: "matched", icon: "🤝", label: "Matching best worker" },
-  { key: "escrow_locked", icon: "🔒", label: "Locking escrow on Somnia" },
-];
-
+/* ──────────────────── Post a job → recommend → negotiate → confirm ──────────────────── */
 function PostJob({ examples }) {
   const { user, profile, loading } = useAuth();
-  const [text, setText] = useState("");
-  const [phase, setPhase] = useState("idle"); // idle | running | done | error
-  const [res, setRes] = useState(null);
-  const [active, setActive] = useState(-1);
-  const timers = useRef([]);
-
-  // Only clients (and admins) can post jobs.
   const canPost = !loading && user && (profile?.role === "client" || profile?.role === "admin");
-
-  function runTicker() {
-    // Visual progress while the real request is in flight.
-    setActive(0);
-    timers.current = [
-      setTimeout(() => setActive(1), 1200),
-      setTimeout(() => setActive(2), 2600),
-    ];
-  }
-  function clearTimers() { timers.current.forEach(clearTimeout); timers.current = []; }
-  useEffect(() => () => clearTimers(), []);
-
-  async function submit(e) {
-    e?.preventDefault();
-    if (!text.trim()) return;
-    setPhase("running"); setRes(null); runTicker();
-    try {
-      const r = await fetch("/api/job", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestText: text }),
-      });
-      const d = await r.json();
-      clearTimers(); setActive(3);
-      if (d.error) { setRes(d); setPhase("error"); }
-      else { setRes(d); setPhase("done"); }
-    } catch (err) {
-      clearTimers(); setRes({ error: String(err) }); setPhase("error");
-    }
-  }
-
-  function reset() {
-    setPhase("idle"); setRes(null); setActive(-1); setText("");
-  }
 
   return (
     <section id="post" className="container section" style={{ scrollMarginTop: 80 }}>
       <div className="center" style={{ marginBottom: "var(--s-5)" }}>
         <span className="eyebrow">Try it live</span>
-        <h2>Post a job, then <span className="gradient-text">watch the agent work</span></h2>
-        <p className="muted" style={{ maxWidth: 560, margin: "var(--s-2) auto 0" }}>
-          Describe what you need. The agent does the rest — and every action lands on-chain.
+        <h2>Post a job, the agent <span className="gradient-text">recommends &amp; negotiates</span></h2>
+        <p className="muted" style={{ maxWidth: 580, margin: "var(--s-2) auto 0" }}>
+          Describe what you need. The agent suggests the best worker, talks you through price &amp; quality,
+          and locks escrow on-chain only when you confirm.
         </p>
       </div>
 
       {!canPost && !loading && (
-        <div className="glass-card glass-card--accent gate" style={{ marginBottom: "var(--s-5)" }}>
+        <div className="glass-card glass-card--accent gate">
           <div className="gate__orb" aria-hidden="true">🔐</div>
           {!user ? (
             <>
@@ -209,102 +163,233 @@ function PostJob({ examples }) {
         </div>
       )}
 
-      <div className="postgrid" style={canPost ? undefined : { display: "none" }}>
-        {/* Input side */}
-        <form className="glass-card glass-card--accent" onSubmit={submit} aria-busy={phase === "running"}>
+      {canPost && <HireFlow examples={examples} />}
+    </section>
+  );
+}
+
+/* The recommend → negotiate → confirm experience. */
+function HireFlow({ examples }) {
+  const [text, setText] = useState("");
+  // stage: input | recommending | recommend | confirming | done | error
+  const [stage, setStage] = useState("input");
+  const [uuid, setUuid] = useState(null);
+  const [job, setJob] = useState(null);
+  const [primary, setPrimary] = useState(null);
+  const [alternative, setAlternative] = useState(null);
+  const [chat, setChat] = useState([]); // {role:'agent'|'client', text}
+  const [chatInput, setChatInput] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [confirmed, setConfirmed] = useState(null);
+  const [error, setError] = useState(null);
+  const chatRef = useRef(null);
+
+  useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" }); }, [chat]);
+
+  async function postJob(e) {
+    e?.preventDefault();
+    if (!text.trim()) return;
+    setStage("recommending"); setError(null);
+    try {
+      const r = await fetch("/api/job", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestText: text }) });
+      const d = await r.json();
+      if (d.error) { setError(d.error); setStage("error"); return; }
+      setUuid(d.uuid); setJob(d.job); setPrimary(d.primary); setAlternative(d.alternative);
+      setChat([{ role: "agent", text: agentIntro(d) }]);
+      setStage("recommend");
+    } catch (err) { setError(String(err)); setStage("error"); }
+  }
+
+  async function sendChat(e) {
+    e?.preventDefault();
+    const msg = chatInput.trim();
+    if (!msg || chatBusy) return;
+    const history = [...chat];
+    setChat((c) => [...c, { role: "client", text: msg }]);
+    setChatInput(""); setChatBusy(true);
+    try {
+      const r = await fetch("/api/negotiate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uuid, message: msg, history,
+          primaryId: primary?.id, alternativeId: alternative?.id,
+          primaryQuote: primary?.quotedPrice, alternativeQuote: alternative?.quotedPrice,
+        }),
+      });
+      const d = await r.json();
+      if (d.error) { setChat((c) => [...c, { role: "agent", text: "Sorry — " + d.error }]); }
+      else {
+        setChat((c) => [...c, { role: "agent", text: d.reply }]);
+        if (d.action === "confirm" && d.confirmWorkerId) {
+          // The agent detected acceptance — confirm that worker.
+          confirm(d.confirmWorkerId);
+        }
+      }
+    } catch (err) { setChat((c) => [...c, { role: "agent", text: "Network error. Try again." }]); }
+    finally { setChatBusy(false); }
+  }
+
+  async function confirm(workerId) {
+    const w = workerId === alternative?.id ? alternative : primary;
+    setStage("confirming"); setError(null);
+    try {
+      const r = await fetch("/api/job/confirm", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uuid, workerId: w.id, quotedPrice: w.quotedPrice }),
+      });
+      const d = await r.json();
+      if (d.error) { setError(d.error); setStage("error"); return; }
+      setConfirmed(d); setStage("done");
+    } catch (err) { setError(String(err)); setStage("error"); }
+  }
+
+  function reset() {
+    setText(""); setStage("input"); setUuid(null); setJob(null); setPrimary(null);
+    setAlternative(null); setChat([]); setChatInput(""); setConfirmed(null); setError(null);
+  }
+
+  // ── INPUT ──
+  if (stage === "input" || stage === "recommending") {
+    return (
+      <div className="hire-single">
+        <form className="glass-card glass-card--accent" onSubmit={postJob} aria-busy={stage === "recommending"}>
           <div className="field">
             <label className="label" htmlFor="job">What do you need done?</label>
-            <textarea
-              id="job"
-              className="textarea"
-              placeholder="e.g. Fix my leaking kitchen sink urgently in Lahore"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              disabled={phase === "running"}
-              rows={4}
-            />
+            <textarea id="job" className="textarea" placeholder="e.g. Fix my leaking kitchen sink urgently in Lahore" value={text} onChange={(e) => setText(e.target.value)} disabled={stage === "recommending"} rows={4} />
           </div>
           <div className="row gap-2 wrap" style={{ marginTop: "var(--s-3)" }}>
             {examples.map((ex) => (
-              <button type="button" key={ex} className="chip" onClick={() => setText(ex)} disabled={phase === "running"}>
+              <button type="button" key={ex} className="chip" onClick={() => setText(ex)} disabled={stage === "recommending"}>
                 {ex.length > 32 ? ex.slice(0, 32) + "…" : ex}
               </button>
             ))}
           </div>
-          <button type="submit" className="btn btn-primary btn-block btn-lg" style={{ marginTop: "var(--s-4)" }} disabled={phase === "running" || !text.trim()}>
-            {phase === "running" ? (<><span className="spinner" /> Agent working…</>) : "Submit & fund job"}
+          <button type="submit" className="btn btn-primary btn-block btn-lg" style={{ marginTop: "var(--s-4)" }} disabled={stage === "recommending" || !text.trim()}>
+            {stage === "recommending" ? (<><span className="spinner" /> Finding the best worker…</>) : "Get recommendation"}
           </button>
           <p className="hint center" style={{ marginTop: "var(--s-3)" }}>
-            Demo locks a small fixed amount of test STT per job. Funds are held in escrow until the work is verified.
+            No payment yet — the agent recommends first. Escrow locks only when you confirm.
           </p>
         </form>
+      </div>
+    );
+  }
 
-        {/* Result / live side */}
-        <div className="glass-card postresult" role="status" aria-live="polite">
-          {phase === "idle" && (
-            <div className="postresult__empty">
-              <div className="postresult__orb" aria-hidden="true">✦</div>
-              <p className="muted center">The agent's decisions will appear here, step by step.</p>
-            </div>
-          )}
-
-          {phase !== "idle" && (
-            <>
-              <h3 style={{ marginBottom: "var(--s-3)" }}>Agent run</h3>
-              <ol className="runlist">
-                {RUN_STEPS.map((s, i) => {
-                  const state = active > i ? "done" : active === i && phase === "running" ? "active" : active >= i ? "done" : "todo";
-                  return (
-                    <li key={s.key} className={`runstep is-${state}`}>
-                      <span className="runstep__icon" aria-hidden="true">
-                        {state === "active" ? <span className="spinner" /> : state === "done" ? "✓" : s.icon}
-                      </span>
-                      <span className="runstep__label">{s.label}</span>
-                    </li>
-                  );
-                })}
-              </ol>
-
-              {phase === "done" && res?.worker && (
-                <div className="result animate-in">
-                  <div className="result__worker glass-card">
-                    <div className="wkr__avatar" aria-hidden="true">{res.worker.emoji || res.worker.name?.[0]}</div>
-                    <div className="stack">
-                      <strong>{res.worker.name}</strong>
-                      <span className="dim" style={{ fontSize: ".85rem" }}>{res.worker.role || "Worker"} · matched by AI</span>
-                    </div>
-                    <span className="pill is-success" style={{ marginLeft: "auto" }}>
-                      <span className="mono">{res.amount} STT</span>
-                    </span>
-                  </div>
-                  {res.job?.summary && <p className="muted" style={{ marginTop: "var(--s-3)" }}>“{res.job.summary}”</p>}
-                  {res.escrowTx?.url && (
-                    <a className="tx-pill" href={res.escrowTx.url} target="_blank" rel="noreferrer" style={{ marginTop: "var(--s-3)" }}>
-                      🔒 Escrow tx ↗
-                    </a>
-                  )}
-                  <div className="result__actions">
-                    <a className="btn btn-secondary btn-sm" href={`/worker?uuid=${res.uuid}`}>Submit proof as worker →</a>
-                    <a className="btn btn-ghost btn-sm" href="/dashboard">Watch on dashboard</a>
-                  </div>
-                  <p className="hint" style={{ marginTop: "var(--s-3)" }}>
-                    Job ID: <span className="mono">{res.uuid}</span>
-                  </p>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={reset} style={{ marginTop: "var(--s-2)" }}>Post another</button>
-                </div>
-              )}
-
-              {phase === "error" && (
-                <div className="result animate-in">
-                  <div className="pill is-danger"><span aria-hidden="true">⚠</span> {res?.error || "Something went wrong"}</div>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={reset} style={{ marginTop: "var(--s-3)" }}>Try again</button>
-                </div>
-              )}
-            </>
-          )}
+  // ── DONE ──
+  if (stage === "done" && confirmed) {
+    return (
+      <div className="hire-single animate-in">
+        <div className="glass-card glass-card--accent">
+          <div className="center" style={{ marginBottom: "var(--s-4)" }}>
+            <div className="postresult__orb" aria-hidden="true" style={{ margin: "0 auto var(--s-3)" }}>✅</div>
+            <h3>{confirmed.worker.name} is hired!</h3>
+            <p className="muted" style={{ marginTop: 6 }}>Escrow locked on-chain{confirmed.emailed ? " · worker notified by email" : ""}.</p>
+          </div>
+          <div className="result__worker glass-card">
+            <div className="wkr__avatar" aria-hidden="true">{confirmed.worker.emoji || confirmed.worker.name?.[0]}</div>
+            <div className="stack"><strong>{confirmed.worker.name}</strong><span className="dim" style={{ fontSize: ".85rem" }}>{confirmed.worker.role}</span></div>
+            <span className="pill is-success" style={{ marginLeft: "auto" }}><span className="mono">{confirmed.amount} STT</span></span>
+          </div>
+          <div className="row gap-2 wrap" style={{ marginTop: "var(--s-3)" }}>
+            {confirmed.escrowTx?.url && <a className="tx-pill" href={confirmed.escrowTx.url} target="_blank" rel="noreferrer">🔒 Escrow tx ↗</a>}
+            {confirmed.emailed && <span className="pill is-info">📧 Worker emailed</span>}
+          </div>
+          <div className="result__actions">
+            <a className="btn btn-secondary btn-sm" href="/dashboard">Watch on dashboard →</a>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={reset}>Post another job</button>
+          </div>
+          <p className="hint" style={{ marginTop: "var(--s-3)" }}>Job ID: <span className="mono">{uuid}</span></p>
         </div>
       </div>
-    </section>
+    );
+  }
+
+  // ── ERROR ──
+  if (stage === "error") {
+    return (
+      <div className="hire-single">
+        <div className="glass-card animate-in">
+          <div className="pill is-danger"><span aria-hidden="true">⚠</span> {error || "Something went wrong"}</div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={reset} style={{ marginTop: "var(--s-3)" }}>Start over</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── RECOMMEND + NEGOTIATE ──
+  return (
+    <div className="postgrid">
+      {/* Recommendations */}
+      <div className="stack gap-4">
+        {job?.summary && (
+          <div className="glass-card" style={{ padding: "var(--s-3) var(--s-4)" }}>
+            <span className="dim" style={{ fontSize: ".78rem", textTransform: "uppercase", letterSpacing: ".06em" }}>Your job</span>
+            <p style={{ marginTop: 4 }}>{job.summary}</p>
+            <div className="row gap-2 wrap" style={{ marginTop: "var(--s-2)" }}>
+              {job.category && <span className="chip">{job.category}</span>}
+              {job.urgency && <span className="chip">{job.urgency}</span>}
+              {job.location && <span className="chip">{job.location}</span>}
+            </div>
+          </div>
+        )}
+        <RecCard worker={primary} badge="Top pick" onConfirm={() => confirm(primary.id)} busy={stage === "confirming"} />
+        {alternative && <RecCard worker={alternative} badge="Cheaper option" subtle onConfirm={() => confirm(alternative.id)} busy={stage === "confirming"} />}
+      </div>
+
+      {/* Negotiation chat */}
+      <div className="glass-card chat">
+        <div className="chat__head"><span aria-hidden="true">💬</span> Chat with the agent</div>
+        <div className="chat__body" ref={chatRef}>
+          {chat.map((m, i) => (
+            <div key={i} className={`bubble bubble--${m.role}`}>{m.text}</div>
+          ))}
+          {chatBusy && <div className="bubble bubble--agent"><span className="spinner" style={{ width: 14, height: 14 }} /></div>}
+          {stage === "confirming" && <div className="bubble bubble--agent"><span className="spinner" style={{ width: 14, height: 14 }} /> Locking escrow…</div>}
+        </div>
+        <form className="chat__input" onSubmit={sendChat}>
+          <input className="input" placeholder="Too expensive? Ask why this one…" value={chatInput} onChange={(e) => setChatInput(e.target.value)} disabled={chatBusy || stage === "confirming"} />
+          <button type="submit" className="btn btn-primary" disabled={chatBusy || stage === "confirming" || !chatInput.trim()}>Send</button>
+        </form>
+        <p className="hint center">Confirm a worker above, or just tell the agent “go with the top pick”.</p>
+      </div>
+    </div>
+  );
+}
+
+function agentIntro(d) {
+  const p = d.primary;
+  if (!p) return "I couldn't find a great match — try rephrasing your request.";
+  let s = `I recommend ${p.name} (${p.role}) for this — ${p.why || "a strong fit"}. Quote: ${p.quotedPrice} STT.`;
+  if (d.alternative) s += ` If budget's tight, ${d.alternative.name} is a cheaper option at ${d.alternative.quotedPrice} STT.`;
+  s += " Want to go ahead, or have questions about price or quality?";
+  return s;
+}
+
+function RecCard({ worker, badge, subtle, onConfirm, busy }) {
+  if (!worker) return null;
+  return (
+    <article className={`glass-card ${subtle ? "" : "glass-card--accent"} rec`}>
+      <div className="row gap-3">
+        <div className="wkr__avatar" aria-hidden="true">{worker.emoji || worker.name?.[0]}</div>
+        <div className="stack" style={{ flex: 1, minWidth: 0 }}>
+          <div className="row gap-2" style={{ justifyContent: "space-between" }}>
+            <strong>{worker.name}</strong>
+            <span className={`pill ${subtle ? "is-info" : "is-violet"}`} style={{ fontSize: ".68rem" }}>{badge}</span>
+          </div>
+          <span className="dim" style={{ fontSize: ".84rem" }}>{worker.role} · {worker.location}</span>
+        </div>
+      </div>
+      {worker.why && <p className="muted" style={{ marginTop: "var(--s-2)", fontSize: ".92rem" }}>{worker.why}</p>}
+      <div className="row gap-2 wrap" style={{ marginTop: "var(--s-2)" }}>
+        {(worker.highlights || []).map((h, i) => <span className="chip" key={i}>{h}</span>)}
+      </div>
+      <div className="row gap-3" style={{ justifyContent: "space-between", marginTop: "var(--s-3)", alignItems: "center" }}>
+        <span className="mono" style={{ fontSize: "1.1rem", fontWeight: 700 }}>{worker.quotedPrice} STT</span>
+        <button type="button" className={`btn ${subtle ? "btn-secondary" : "btn-primary"} btn-sm`} onClick={onConfirm} disabled={busy}>
+          {busy ? <span className="spinner" /> : `Hire ${worker.name?.split(" ")[0]}`}
+        </button>
+      </div>
+    </article>
   );
 }
 

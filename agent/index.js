@@ -5,8 +5,9 @@
 //
 // Every decision + tx is logged to Supabase (if configured) and returned for the dashboard.
 const { parseJob } = require("./parseJob");
-const { matchWorker } = require("./matchWorker");
+const { recommendWorkers } = require("./recommend");
 const { verifyProof } = require("./verifyProof");
+const { sendJobEmail } = require("./notify");
 const { lockEscrow, releasePayment, refundClient, recordProof } = require("./executor");
 const { supabase } = require("../lib/supabase");
 
@@ -20,30 +21,66 @@ async function log(jobUuid, step, payload) {
 }
 
 /**
- * Phase A — runs the moment a client funds/submits a job.
- * @param {string} jobUuid - unique id (uuid)
+ * Phase A1 — runs when a client posts a job. Parse + RECOMMEND (no escrow yet).
+ * @param {string} jobUuid
  * @param {string} requestText - client's plain-text request
- * @param {Array} workers - available worker pool
+ * @param {Array} workers - available worker pool (incl. wallet + email)
  */
-async function startJob(jobUuid, requestText, workers) {
+async function recommendJob(jobUuid, requestText, workers) {
   const steps = [];
 
   const job = await parseJob(requestText);
   steps.push(await log(jobUuid, "parsed", job));
 
-  const { worker, reason } = await matchWorker(job, workers);
-  if (!worker) throw new Error("no worker matched");
-  steps.push(await log(jobUuid, "matched", { worker, reason }));
+  const { primary, alternative } = await recommendWorkers(job, workers);
+  if (!primary) throw new Error("no worker could be recommended");
+  steps.push(await log(jobUuid, "recommended", {
+    primary: { id: primary.id, name: primary.name, why: primary.why, quotedPrice: primary.quotedPrice },
+    alternative: alternative ? { id: alternative.id, name: alternative.name, quotedPrice: alternative.quotedPrice } : null,
+  }));
 
-  // The LLM estimates a fair price (job.estimatedBudgetSTT), but on testnet our
-  // faucet STT is limited — cap the actually-locked amount so the demo never
-  // exceeds the agent wallet balance. ESCROW_AMOUNT_STT overrides the cap.
-  const estimated = job.estimatedBudgetSTT || 1;
+  return { job, primary, alternative, steps };
+}
+
+/**
+ * Phase A2 — runs when the client CONFIRMS a worker. Lock escrow + email worker.
+ * @param {string} jobUuid
+ * @param {object} job - parsed job
+ * @param {object} worker - the chosen worker (full object: wallet, email, quotedPrice, role)
+ * @param {object} meta - { clientName, fullRequestText }
+ */
+async function confirmJob(jobUuid, job, worker, meta = {}) {
+  const steps = [];
+
+  // The LLM estimates a fair price, but testnet STT is limited — cap the locked
+  // amount so the demo never exceeds the agent wallet. ESCROW_AMOUNT_STT overrides.
+  const estimated = worker.quotedPrice || job.estimatedBudgetSTT || 1;
   const amount = Number(process.env.ESCROW_AMOUNT_STT || 0.01);
   const lock = await lockEscrow(jobUuid, worker.wallet, amount);
-  steps.push(await log(jobUuid, "escrow_locked", { estimated, amount, ...lock }));
+  steps.push(await log(jobUuid, "escrow_locked", { estimated, amount, worker: worker.name, ...lock }));
 
-  return { job, worker, estimated, amount, escrowTx: lock, steps };
+  // Notify the hired worker by email via the n8n webhook (best-effort).
+  let email = { ok: false, skipped: true };
+  if (worker.email) {
+    email = await sendJobEmail({
+      jobId: jobUuid,
+      worker: { name: worker.name, email: worker.email, role: worker.role },
+      clientName: meta.clientName || "A client",
+      job: {
+        summary: job.summary,
+        category: job.category,
+        urgency: job.urgency,
+        location: job.location,
+        fullRequestText: meta.fullRequestText || job.summary,
+      },
+      quotedPrice: worker.quotedPrice ?? estimated,
+      escrow: { amountSTT: amount, txUrl: lock.url },
+      nowIso: meta.nowIso || "",
+    });
+    steps.push(await log(jobUuid, "worker_emailed", { to: worker.email, ok: email.ok, status: email.status || null }));
+  }
+
+  return { estimated, amount, escrowTx: lock, email, steps };
 }
 
 /**
@@ -73,4 +110,4 @@ async function settleJob(jobUuid, job, proofText) {
   return { verdict, settleTx, proofTx, steps };
 }
 
-module.exports = { startJob, settleJob, log };
+module.exports = { recommendJob, confirmJob, settleJob, log };

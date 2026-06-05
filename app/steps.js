@@ -23,11 +23,17 @@ export const PIPELINE = [
   { icon: "📜", label: "Proof" },
 ];
 
-export const STEP_MAP = Object.fromEntries(STEPS.map((s) => [s.key, s]));
+// Add recommend/match/email steps to the canonical map for the timeline.
+export const STEP_MAP = Object.fromEntries([
+  ...STEPS,
+  { key: "recommended", icon: "🎯", label: "Recommended worker", status: "info" },
+  { key: "worker_emailed", icon: "📧", label: "Worker emailed", status: "info" },
+].map((s) => [s.key, s]));
 
 // Map a job status -> pill variant + label.
 export const STATUS_PILL = {
   created:       { cls: "is-info",    label: "Created" },
+  recommending:  { cls: "is-info",    label: "Choosing worker" },
   escrow_locked: { cls: "is-violet",  label: "Escrow locked" },
   paid:          { cls: "is-success", label: "Paid" },
   refunded:      { cls: "is-danger",  label: "Refunded" },
