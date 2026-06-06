@@ -69,13 +69,11 @@ Network: Somnia Testnet (Shannon) · chainId `50312` · RPC `https://dream-rpc.s
 4. **Worker** submits a **photo proof** → AI pre-checks → *"awaiting client approval."*
 5. **Client** approves on the dashboard → **payment released** + **proof recorded on-chain**.
 
-(Full script: [presentation/DEMO-SCRIPT.md](presentation/DEMO-SCRIPT.md) · Pitch deck: [presentation/PITCH-DECK.md](presentation/PITCH-DECK.md))
-
 ---
 
 ## 🔑 Test accounts
 
-> Pre-seeded so judges can log in instantly. All verified working.
+> Pre-seeded so you can log in instantly. All verified working.
 
 ### Admin & Client
 
@@ -169,50 +167,17 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 NEXT_PUBLIC_EXPLORER=https://shannon-explorer.somnia.network
 ```
 
-### 3. Database (Supabase SQL editor, in order)
-```
-supabase/schema.sql            # jobs, workers, agent_logs
-supabase/auth-schema.sql       # profiles, roles, RLS, job ownership
-supabase/worker-accounts.sql   # worker = account model + workers VIEW
-node scripts/seed-workers.js   # creates the 20 worker accounts
-supabase/worker-accounts-finalize.sql
-supabase/proof-flow.sql        # proof columns + job-proofs storage bucket
-supabase/dispute-reason.sql    # dispute reason column
-```
-Then in Supabase → Auth → Providers → Email: turn **off** "Confirm email" for instant demo logins.
-
-### 4. Contracts (already deployed; redeploy only if needed)
+### 3. Contracts (already deployed; redeploy only if needed)
 ```bash
 npm run compile
 npm run deploy                 # prints new addresses → update .env
 ```
 
-### 5. Start
+### 4. Start
 ```bash
 npm run dev                    # http://localhost:3000
 ```
 
----
-
-## 📁 Project structure
-
-```
-contracts/     Escrow.sol · ProofRegistry.sol
-scripts/       deploy.js · seed-workers.js · e2e-test.js
-agent/         parseJob · recommend · negotiate · visionCheck · executor · notify · index
-lib/           somnia · contracts · openai · supabase · pool · wallet · jobstore · auth
-app/           Next.js (landing · login · worker · dashboard · admin · profile/setup) + api routes
-supabase/      schema + migration SQL
-n8n/           worker-email workflow
-presentation/  PITCH-DECK.md · DEMO-SCRIPT.md · logo
-```
-
-## ✅ Testing
-
-```bash
-node scripts/e2e-test.js       # full journey: post→recommend→negotiate→confirm→proof→approve→release
-```
-Covers the happy path + auth boundaries (other client can't see a job; worker can't approve own job). 20/20 passing.
 
 ---
 
