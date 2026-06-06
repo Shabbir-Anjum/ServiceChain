@@ -107,16 +107,18 @@ function JobCard({ job, role }) {
   const [deciding, setDeciding] = useState(null); // 'approve' | 'dispute'
   const [decided, setDecided] = useState(null);
   const [err, setErr] = useState(null);
+  const [showDispute, setShowDispute] = useState(false); // reveal the reason box
+  const [reason, setReason] = useState("");
 
   // The client (or admin) can review + decide when proof is submitted.
   const canDecide = (role === "client" || role === "admin") && job.status === "proof_submitted" && !decided;
 
-  async function decide(decision) {
+  async function decide(decision, reasonText) {
     setDeciding(decision); setErr(null);
     try {
       const r = await fetch("/api/job/decision", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uuid: job.uuid, decision }),
+        body: JSON.stringify({ uuid: job.uuid, decision, reason: reasonText }),
       });
       const d = await r.json();
       if (d.error) { setErr(d.error); setDeciding(null); }
@@ -157,19 +159,42 @@ function JobCard({ job, role }) {
               {job.aiCheck.notes ? ` — ${job.aiCheck.notes}` : ""}
             </div>
           )}
-          {canDecide && (
+          {canDecide && !showDispute && (
             <div className="row gap-2" style={{ marginTop: "var(--s-3)" }}>
               <button type="button" className="btn btn-primary btn-sm" onClick={() => decide("approve")} disabled={!!deciding}>
                 {deciding === "approve" ? <span className="spinner" /> : "✓ Approve & pay"}
               </button>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => decide("dispute")} disabled={!!deciding}>
-                {deciding === "dispute" ? <span className="spinner" /> : "✕ Dispute"}
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowDispute(true)} disabled={!!deciding}>
+                ✕ Dispute
               </button>
+            </div>
+          )}
+          {canDecide && showDispute && (
+            <div className="stack gap-2" style={{ marginTop: "var(--s-3)" }}>
+              <textarea
+                className="textarea" rows={2}
+                placeholder="Why are you disputing? e.g. work not done, wrong photo, poor quality…"
+                value={reason} onChange={(e) => setReason(e.target.value)} disabled={!!deciding}
+                style={{ minHeight: 64 }}
+              />
+              <div className="row gap-2">
+                <button type="button" className="btn btn-danger btn-sm" onClick={() => decide("dispute", reason)} disabled={!!deciding || reason.trim().length < 3}>
+                  {deciding === "dispute" ? <span className="spinner" /> : "Confirm dispute & refund"}
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setShowDispute(false); setReason(""); }} disabled={!!deciding}>Cancel</button>
+              </div>
             </div>
           )}
           {!canDecide && role === "worker" && <p className="hint" style={{ marginTop: "var(--s-2)" }}>Awaiting the client's approval.</p>}
           {decided && <div className={`pill ${decided === "approved" ? "is-success" : "is-danger"}`} style={{ marginTop: "var(--s-2)" }}>{decided === "approved" ? "Payment released" : "Refunded"}</div>}
           {err && <div className="pill is-danger" style={{ marginTop: "var(--s-2)" }}>{err}</div>}
+        </div>
+      )}
+
+      {/* Recorded dispute reason on a refunded job */}
+      {job.status === "refunded" && job.disputeReason && (
+        <div className="ai-advisory" style={{ borderColor: "rgba(251,113,133,0.3)", background: "var(--danger-dim)", color: "var(--danger)" }}>
+          <span aria-hidden="true">↩️</span> Disputed: {job.disputeReason}
         </div>
       )}
 

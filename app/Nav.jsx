@@ -2,11 +2,15 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "./AuthProvider";
+import { useWallet } from "./WalletProvider";
+
+const short = (a) => (a ? a.slice(0, 6) + "…" + a.slice(-4) : "");
 
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, profile, loading, signOut } = useAuth();
+  const { address, connect, connecting, installed } = useWallet();
   const [open, setOpen] = useState(false);
 
   useEffect(() => setOpen(false), [pathname]);
@@ -60,6 +64,20 @@ export default function Nav() {
         </nav>
 
         <div className="nav__right">
+          {/* Wallet connect — clients (and admins) pay escrow from their wallet */}
+          {!loading && user && (role === "client" || role === "admin") && (
+            address ? (
+              <span className="pill is-violet nav__wallet" title={address}>
+                <span className="dot" aria-hidden="true" /> {short(address)}
+              </span>
+            ) : installed ? (
+              <button type="button" className="btn btn-secondary btn-sm nav__wallet" onClick={() => connect().catch(() => {})} disabled={connecting}>
+                {connecting ? <span className="spinner" /> : "Connect wallet"}
+              </button>
+            ) : (
+              <a href="https://metamask.io/download/" target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm nav__wallet">Get MetaMask</a>
+            )
+          )}
           {!loading && user && (
             <span className="nav__user" title={profile?.email || user.email}>
               <span className={`pill ${role === "admin" ? "is-violet" : role === "worker" ? "is-info" : "is-success"} nav__role`}>{role || "client"}</span>

@@ -8,7 +8,8 @@ const { parseJob } = require("./parseJob");
 const { recommendWorkers } = require("./recommend");
 const { visionCheck } = require("./visionCheck");
 const { sendJobEmail } = require("./notify");
-const { lockEscrow, releasePayment, refundClient, recordProof } = require("./executor");
+const { lockEscrow, releasePayment, refundClient, recordProof, verifyDeposit } = require("./executor");
+const { txUrl } = require("../lib/somnia");
 const { supabase } = require("../lib/supabase");
 
 async function log(jobUuid, step, payload) {
@@ -43,21 +44,33 @@ async function recommendJob(jobUuid, requestText, workers) {
 }
 
 /**
- * Phase A2 — runs when the client CONFIRMS a worker. Lock escrow + email worker.
+ * Phase A2 — runs when the client CONFIRMS a worker. Escrow must be FUNDED, then
+ * email the worker. Funding comes either from:
+ *   - the CLIENT's own wallet (MetaMask) — pass meta.prefundedTx; we VERIFY it on-chain.
+ *   - the AGENT wallet (demo fallback) — no prefundedTx; we call deposit() ourselves.
  * @param {string} jobUuid
  * @param {object} job - parsed job
- * @param {object} worker - the chosen worker (full object: wallet, email, quotedPrice, role)
- * @param {object} meta - { clientName, fullRequestText }
+ * @param {object} worker - chosen worker (wallet, email, quotedPrice, role)
+ * @param {object} meta - { clientName, fullRequestText, nowIso, prefundedTx?, payerAddress? }
  */
 async function confirmJob(jobUuid, job, worker, meta = {}) {
   const steps = [];
 
-  // The LLM estimates a fair price, but testnet STT is limited — cap the locked
-  // amount so the demo never exceeds the agent wallet. ESCROW_AMOUNT_STT overrides.
   const estimated = worker.quotedPrice || job.estimatedBudgetSTT || 1;
   const amount = Number(process.env.ESCROW_AMOUNT_STT || 0.01);
-  const lock = await lockEscrow(jobUuid, worker.wallet, amount);
-  steps.push(await log(jobUuid, "escrow_locked", { estimated, amount, worker: worker.name, ...lock }));
+
+  let lock;
+  if (meta.prefundedTx) {
+    // CLIENT already paid from their wallet — verify the deposit is real on-chain.
+    const v = await verifyDeposit(jobUuid, worker.wallet);
+    if (!v.ok) throw new Error("Could not verify your escrow payment on-chain.");
+    lock = { hash: meta.prefundedTx, url: txUrl(meta.prefundedTx), paidBy: "client" };
+    steps.push(await log(jobUuid, "escrow_locked", { estimated, amount, worker: worker.name, paidBy: "client", ...lock }));
+  } else {
+    // FALLBACK: agent funds the escrow (demo, hands-off).
+    lock = { ...(await lockEscrow(jobUuid, worker.wallet, amount)), paidBy: "agent" };
+    steps.push(await log(jobUuid, "escrow_locked", { estimated, amount, worker: worker.name, paidBy: "agent", ...lock }));
+  }
 
   // Notify the hired worker by email via the n8n webhook (best-effort).
   let email = { ok: false, skipped: true };
@@ -106,8 +119,9 @@ async function submitProof(jobUuid, job, proofText, photoUrl) {
  * @param {object} job - parsed job
  * @param {('approve'|'dispute')} decision
  * @param {string} proofText - the worker's note (for the on-chain proof hash)
+ * @param {string|null} disputeReason - why the client disputed (recorded on dispute)
  */
-async function clientDecision(jobUuid, job, decision, proofText) {
+async function clientDecision(jobUuid, job, decision, proofText, disputeReason) {
   const steps = [];
   const approved = decision === "approve";
 
@@ -117,13 +131,16 @@ async function clientDecision(jobUuid, job, decision, proofText) {
     steps.push(await log(jobUuid, "payment_released", settleTx));
   } else {
     settleTx = await refundClient(jobUuid);
-    steps.push(await log(jobUuid, "client_refunded", settleTx));
+    steps.push(await log(jobUuid, "client_refunded", { ...settleTx, reason: disputeReason || "" }));
   }
 
-  const proofTx = await recordProof(jobUuid, proofText || "", approved ? "approved" : "disputed");
+  // Record proof on-chain; for a dispute, hash the worker's note + the reason so
+  // the dispute is part of the immutable record.
+  const proofPayload = approved ? (proofText || "") : `${proofText || ""}\n[DISPUTE] ${disputeReason || ""}`;
+  const proofTx = await recordProof(jobUuid, proofPayload, approved ? "approved" : "disputed");
   steps.push(await log(jobUuid, "proof_recorded", proofTx));
 
-  return { approved, settleTx, proofTx, steps };
+  return { approved, settleTx, proofTx, disputeReason: approved ? null : disputeReason, steps };
 }
 
 module.exports = { recommendJob, confirmJob, submitProof, clientDecision, log };

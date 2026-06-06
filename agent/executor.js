@@ -1,7 +1,23 @@
 // On-chain actions, signed by the AGENT wallet (ethers v6).
 // These are the autonomous moves: lock escrow, release/refund, record proof.
-const { escrowWrite, proofWrite, toJobId } = require("../lib/contracts");
+const { escrowWrite, escrowRead, proofWrite, toJobId } = require("../lib/contracts");
 const { ethers, txUrl } = require("../lib/somnia");
+
+// Read on-chain job state — used to VERIFY a client's MetaMask deposit before we
+// trust it. State enum: 0 None, 1 Funded, 2 Released, 3 Refunded.
+async function getEscrowState(jobUuid) {
+  const escrow = escrowRead();
+  const j = await escrow.getJob(toJobId(jobUuid));
+  return { client: j.client, worker: j.worker, amount: j.amount, state: Number(j.state) };
+}
+
+// True only if the job is funded on-chain to the expected worker for >0 value.
+async function verifyDeposit(jobUuid, expectedWorker) {
+  const j = await getEscrowState(jobUuid);
+  const fundedOk = j.state === 1 && j.amount > 0n;
+  const workerOk = !expectedWorker || j.worker.toLowerCase() === String(expectedWorker).toLowerCase();
+  return { ok: fundedOk && workerOk, ...j };
+}
 
 // NOTE: In a full marketplace the CLIENT funds the escrow from their own wallet
 // (deposit is payable, called client-side via MetaMask). For an autonomous
@@ -40,4 +56,4 @@ async function recordProof(jobUuid, proofText, status) {
   return { hash: rcpt.hash, url: txUrl(rcpt.hash), dataHash };
 }
 
-module.exports = { lockEscrow, releasePayment, refundClient, recordProof };
+module.exports = { lockEscrow, releasePayment, refundClient, recordProof, getEscrowState, verifyDeposit };

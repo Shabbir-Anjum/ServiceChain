@@ -11,9 +11,14 @@ export async function POST(req) {
     const auth = await requireRole("client", "admin");
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-    const { uuid, decision } = await req.json();
+    const { uuid, decision, reason } = await req.json();
     if (decision !== "approve" && decision !== "dispute") {
       return NextResponse.json({ error: "decision must be 'approve' or 'dispute'" }, { status: 400 });
+    }
+    // A dispute must say why — it's the refund's audit record.
+    const disputeReason = String(reason || "").trim();
+    if (decision === "dispute" && disputeReason.length < 3) {
+      return NextResponse.json({ error: "Please give a reason for the dispute." }, { status: 400 });
     }
 
     const rec = await store.get(uuid);
@@ -27,16 +32,17 @@ export async function POST(req) {
       return NextResponse.json({ error: "No submitted proof to decide on." }, { status: 409 });
     }
 
-    const result = await clientDecision(uuid, rec.job, decision, rec.proofText || "");
+    const result = await clientDecision(uuid, rec.job, decision, rec.proofText || "", decision === "dispute" ? disputeReason : null);
 
     await store.update(uuid, {
       status: result.approved ? "paid" : "refunded",
       clientDecisionResult: result.approved ? "approved" : "disputed",
       clientDecidedAt: new Date().toISOString(),
+      disputeReason: result.approved ? null : disputeReason,
     });
     await store.pushSteps(uuid, result.steps.map((s) => ({ step: s.step, payload: s.payload })));
 
-    return NextResponse.json({ uuid, approved: result.approved, settleTx: result.settleTx, proofTx: result.proofTx });
+    return NextResponse.json({ uuid, approved: result.approved, reason: result.approved ? null : disputeReason, settleTx: result.settleTx, proofTx: result.proofTx });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: e.message }, { status: 500 });

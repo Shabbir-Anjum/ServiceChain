@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { PIPELINE } from "./steps";
 import { useAuth } from "./AuthProvider";
+import { useWallet } from "./WalletProvider";
+import { hasWallet, payEscrow } from "../lib/wallet";
 
 const EXAMPLES = [
   "Fix my leaking kitchen sink urgently in Lahore",
@@ -132,6 +134,8 @@ function Stat({ label, value, accent }) {
 function PostJob({ examples }) {
   const { user, profile, loading } = useAuth();
   const canPost = !loading && user && (profile?.role === "client" || profile?.role === "admin");
+  // Signed in but profile (role) hasn't resolved yet — don't flash the wrong gate.
+  const profilePending = !loading && user && !profile;
 
   return (
     <section id="post" className="container section" style={{ scrollMarginTop: 80 }}>
@@ -144,7 +148,11 @@ function PostJob({ examples }) {
         </p>
       </div>
 
-      {!canPost && !loading && (
+      {(loading || profilePending) && (
+        <div className="glass-card gate"><span className="spinner" style={{ margin: "0 auto" }} /></div>
+      )}
+
+      {!canPost && !loading && !profilePending && (
         <div className="glass-card glass-card--accent gate">
           <div className="gate__orb" aria-hidden="true">🔐</div>
           {!user ? (
@@ -170,6 +178,7 @@ function PostJob({ examples }) {
 
 /* The recommend → negotiate → confirm experience. */
 function HireFlow({ examples }) {
+  const { address: walletAddress, connect: connectWalletCtx } = useWallet();
   const [text, setText] = useState("");
   // stage: input | recommending | recommend | confirming | done | error
   const [stage, setStage] = useState("input");
@@ -182,6 +191,7 @@ function HireFlow({ examples }) {
   const [chatBusy, setChatBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(null);
   const [error, setError] = useState(null);
+  const [payMsg, setPayMsg] = useState(null);
   const chatRef = useRef(null);
 
   useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" }); }, [chat]);
@@ -233,20 +243,49 @@ function HireFlow({ examples }) {
   }
 
   async function confirm(workerId, swapped) {
-    // Resolve the chosen worker from whichever of the three slots matches.
     const w = swapped && swapped.id === workerId ? swapped
       : workerId === alternative?.id ? alternative
       : workerId === primary?.id ? primary
       : { id: workerId };
-    setStage("confirming"); setError(null);
+    setStage("confirming"); setError(null); setPayMsg(null);
     try {
+      let prefundedTx = null;
+
+      if (hasWallet()) {
+        // CLIENT pays from their own MetaMask: prepare -> sign deposit -> finalize.
+        try {
+          setPayMsg("Preparing payment…");
+          const pr = await fetch("/api/job/confirm", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ uuid, workerId: w.id, mode: "prepare" }),
+          });
+          const pd = await pr.json();
+          if (pd.error) throw new Error(pd.error);
+
+          if (!walletAddress) {
+            setPayMsg("Connecting wallet…");
+            await connectWalletCtx();
+          }
+          setPayMsg(`Approve ${pd.amountStt} STT in MetaMask…`);
+          const tx = await payEscrow({ jobUuid: pd.jobUuid, workerWallet: pd.workerWallet, amountStt: pd.amountStt });
+          prefundedTx = tx.hash;
+          setPayMsg("Payment confirmed on-chain ✓");
+        } catch (walletErr) {
+          // User declined / no funds / wrong network → fall back to agent funding.
+          const m = walletErr?.message || String(walletErr);
+          if (/user rejected|denied|4001/i.test(m)) { setError("Payment cancelled."); setStage("recommend"); setPayMsg(null); return; }
+          setPayMsg("Wallet unavailable — using demo escrow…");
+        }
+      }
+
+      // Finalize: with the client's tx (verified) or agent-funded fallback.
       const r = await fetch("/api/job/confirm", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uuid, workerId: w.id, quotedPrice: w.quotedPrice }),
+        body: JSON.stringify({ uuid, workerId: w.id, quotedPrice: w.quotedPrice, prefundedTx }),
       });
       const d = await r.json();
       if (d.error) { setError(d.error); setStage("error"); return; }
-      setConfirmed(d); setStage("done");
+      setConfirmed(d); setStage("done"); setPayMsg(null);
     } catch (err) { setError(String(err)); setStage("error"); }
   }
 
@@ -299,6 +338,8 @@ function HireFlow({ examples }) {
           </div>
           <div className="row gap-2 wrap" style={{ marginTop: "var(--s-3)" }}>
             {confirmed.escrowTx?.url && <a className="tx-pill" href={confirmed.escrowTx.url} target="_blank" rel="noreferrer">🔒 Escrow secured ↗</a>}
+            {confirmed.paidBy === "client" && <span className="pill is-success">💳 Paid from your wallet</span>}
+            {confirmed.paidBy === "agent" && <span className="pill is-info">demo escrow</span>}
             {confirmed.emailed && <span className="pill is-info">📧 Worker emailed</span>}
           </div>
           <div className="result__actions">
@@ -351,7 +392,7 @@ function HireFlow({ examples }) {
             <div key={i} className={`bubble bubble--${m.role}`}>{m.text}</div>
           ))}
           {chatBusy && <div className="bubble bubble--agent"><span className="spinner" style={{ width: 14, height: 14 }} /></div>}
-          {stage === "confirming" && <div className="bubble bubble--agent"><span className="spinner" style={{ width: 14, height: 14 }} /> Locking escrow…</div>}
+          {stage === "confirming" && <div className="bubble bubble--agent"><span className="spinner" style={{ width: 14, height: 14 }} /> {payMsg || "Locking escrow…"}</div>}
         </div>
         <form className="chat__input" onSubmit={sendChat}>
           <input className="input" placeholder="Too expensive? Ask why this one…" value={chatInput} onChange={(e) => setChatInput(e.target.value)} disabled={chatBusy || stage === "confirming"} />

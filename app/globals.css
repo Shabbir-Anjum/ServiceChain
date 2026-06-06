@@ -247,6 +247,8 @@ h3 { font-size: clamp(1.15rem, 2vw, 1.4rem); }
 .btn-secondary:hover { border-color: var(--border-violet); background: var(--tint-violet); }
 .btn-ghost { background: transparent; color: var(--text-2); }
 .btn-ghost:hover { background: var(--glass); color: var(--text); }
+.btn-danger { background: var(--danger-dim); color: var(--danger); border-color: rgba(251, 113, 133, 0.4); }
+.btn-danger:hover { background: rgba(251, 113, 133, 0.22); border-color: var(--danger); }
 .btn-sm { height: 36px; padding: 0 var(--s-4); font-size: 0.86rem; border-radius: var(--r-sm); }
 .btn-lg { height: 52px; padding: 0 var(--s-6); font-size: 1.02rem; }
 .btn-block { width: 100%; }
@@ -452,8 +454,9 @@ button.chip { cursor: pointer; }
 .nav__role { text-transform: capitalize; font-size: 0.7rem; padding: 3px 9px; }
 .nav__email { font-size: 0.84rem; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav__auth-m { display: none; }
+.nav__wallet { font-size: 0.78rem; }
 @media (max-width: 820px) {
-  .nav__login, .nav__logout, .nav__email { display: none; }
+  .nav__login, .nav__logout, .nav__email, .nav__wallet { display: none; }
   .nav__auth-m { display: block; margin-top: var(--s-2); }
 }
 

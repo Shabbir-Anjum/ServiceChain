@@ -1,6 +1,7 @@
 import "./globals.css";
 import Nav from "./Nav";
 import AuthProvider from "./AuthProvider";
+import WalletProvider from "./WalletProvider";
 
 export const metadata = {
   title: {
@@ -34,6 +35,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         <AuthProvider>
+          <WalletProvider>
           <Nav />
           <main id="main">{children}</main>
         <footer className="footer">
@@ -50,6 +52,7 @@ export default function RootLayout({ children }) {
             </div>
           </div>
         </footer>
+          </WalletProvider>
         </AuthProvider>
       </body>
     </html>

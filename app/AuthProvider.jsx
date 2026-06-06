@@ -29,12 +29,24 @@ export default function AuthProvider({ children }) {
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getUser().then(async ({ data }) => {
+    // If we landed on a URL with a Supabase auth ?code= (email confirm / magic
+    // link), exchange it for a session, then clean the address bar.
+    (async () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("code")) {
+          try { await supabase.auth.exchangeCodeForSession(window.location.href); } catch {}
+          params.delete("code");
+          const clean = window.location.pathname + (params.toString() ? `?${params}` : "") + window.location.hash;
+          window.history.replaceState({}, "", clean);
+        }
+      }
+      const { data } = await supabase.auth.getUser();
       if (!active) return;
       setUser(data?.user || null);
       await loadProfile(data?.user);
       setLoading(false);
-    });
+    })();
     const { data: sub } = supabase.auth.onAuthStateChange(async (_e, session) => {
       setUser(session?.user || null);
       await loadProfile(session?.user);
