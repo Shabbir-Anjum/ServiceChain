@@ -16,4 +16,23 @@ module.exports = {
       accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
     },
   },
+  // Contract verification via Somnia's Blockscout explorer.
+  etherscan: {
+    apiKey: { somnia: "empty" }, // Blockscout doesn't require a real key
+    customChains: [
+      {
+        network: "somnia",
+        chainId: Number(process.env.SOMNIA_CHAIN_ID || 50312),
+        urls: {
+          apiURL: "https://shannon-explorer.somnia.network/api",
+          browserURL: "https://shannon-explorer.somnia.network",
+        },
+      },
+    ],
+  },
+  sourcify: {
+    enabled: true,
+    apiUrl: "https://sourcify.dev/server",
+    browserUrl: "https://repo.sourcify.dev",
+  },
 };
