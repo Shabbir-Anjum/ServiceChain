@@ -221,6 +221,15 @@ function ProofForm({ job, onBack, onDone }) {
                 </p>
               </div>
             )}
+            {res.onchain?.source === "somnia-onchain" && (
+              <div className="glass-card verdict__reason" style={{ borderColor: "var(--border-violet)", background: "var(--tint-violet)" }}>
+                <span style={{ fontSize: ".78rem", textTransform: "uppercase", letterSpacing: ".06em", color: "var(--violet-400)" }}>⛓️ Verified on-chain by Somnia's LLM agent</span>
+                <p className="muted" style={{ marginTop: 4 }}>
+                  Consensus verdict: <strong style={{ color: res.onchain.decision === "approved" ? "var(--success)" : "var(--danger)" }}>{res.onchain.decision}</strong> — validator-run, on Somnia's Agentic L1.
+                  {res.onchain.txUrl && <> · <a className="tx-pill" href={res.onchain.txUrl} target="_blank" rel="noreferrer" style={{ marginTop: 6 }}>view tx ↗</a></>}
+                </p>
+              </div>
+            )}
             <p className="muted" style={{ fontSize: ".9rem" }}>The client has been notified. Once they approve, the escrowed payment is released to your wallet automatically.</p>
             <button type="button" className="btn btn-secondary btn-sm" onClick={onDone}>Back to my jobs →</button>
           </div>

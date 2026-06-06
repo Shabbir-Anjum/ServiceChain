@@ -159,6 +159,12 @@ function JobCard({ job, role }) {
               {job.aiCheck.notes ? ` — ${job.aiCheck.notes}` : ""}
             </div>
           )}
+          {job.aiCheck?.onchain?.source === "somnia-onchain" && (
+            <div className="ai-advisory" style={{ background: "var(--tint-violet)", borderColor: "var(--border-violet)", color: "var(--violet-400)" }}>
+              <span aria-hidden="true">⛓️</span> Somnia on-chain LLM verdict: <strong>{job.aiCheck.onchain.decision}</strong> (validator consensus)
+              {job.aiCheck.onchain.txUrl && <> · <a href={job.aiCheck.onchain.txUrl} target="_blank" rel="noreferrer" style={{ color: "var(--cyan-400)" }}>tx ↗</a></>}
+            </div>
+          )}
           {canDecide && !showDispute && (
             <div className="row gap-2" style={{ marginTop: "var(--s-3)" }}>
               <button type="button" className="btn btn-primary btn-sm" onClick={() => decide("approve")} disabled={!!deciding}>

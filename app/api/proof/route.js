@@ -23,18 +23,19 @@ export async function POST(req) {
       return NextResponse.json({ error: "Job is not ready for proof." }, { status: 409 });
     }
 
-    const { ai, steps } = await submitProof(uuid, rec.job, proofText, photoUrl || null);
+    const { ai, onchain, steps } = await submitProof(uuid, rec.job, proofText, photoUrl || null);
 
     await store.update(uuid, {
       status: "proof_submitted",
       proofText: proofText || null,
       proofPhotoUrl: photoUrl || null,
       aiCheck: ai,
+      onchainCheck: onchain || null,
       proofSubmittedAt: new Date().toISOString(),
     });
     await store.pushSteps(uuid, steps.map((s) => ({ step: s.step, payload: s.payload })));
 
-    return NextResponse.json({ uuid, status: "proof_submitted", ai });
+    return NextResponse.json({ uuid, status: "proof_submitted", ai, onchain });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: e.message }, { status: 500 });

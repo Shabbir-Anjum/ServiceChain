@@ -43,10 +43,11 @@ Service marketplaces run on blind trust: the client pays first and hopes, or the
 
 ## 🏆 Why it fits the Somnia Agentathon
 
+- **Agent-native (Somnia Agentic L1) — LIVE:** proof verification runs on **Somnia's on-chain LLM Inference Agent**. Our [`AgentVerifier`](https://shannon-explorer.somnia.network/address/0x01E09E5dd50A332a7C2CA597e5F202EA9794A655) contract calls the platform requester (`createRequest`), a validator subcommittee runs the model, reaches consensus, and the **verdict is written on-chain** — typically in **3–7 seconds**, ~0.24 STT per call. The AI verdict isn't a private server call; it's a Somnia primitive. (GPT-4o stays as a fallback + for image/vision, which the on-chain LLM doesn't do.)
 - **Agent-first:** the agent IS the operator — parse → recommend → negotiate → escrow → verify → settle.
 - **Autonomous:** the agent makes decisions and **signs real Somnia transactions** itself.
 - **Provable:** every action is a transaction on [shannon-explorer.somnia.network](https://shannon-explorer.somnia.network).
-- **Why Somnia:** sub-second finality + ultra-low fees make micro-priced ($20) real-world jobs viable on-chain.
+- **Why Somnia:** sub-second finality + ultra-low fees make micro-priced ($20) real-world jobs viable on-chain — and its Agentic L1 lets contracts run consensus-validated AI.
 
 ---
 
@@ -56,6 +57,7 @@ Service marketplaces run on blind trust: the client pays first and hopes, or the
 |---|---|
 | **Escrow** | [`0x21058fB4b6F621F3770B1650218209e9dB184F25`](https://shannon-explorer.somnia.network/address/0x21058fB4b6F621F3770B1650218209e9dB184F25) |
 | **ProofRegistry** | [`0x180eBF385A46d41F8B796fb6aF275c9C0892F659`](https://shannon-explorer.somnia.network/address/0x180eBF385A46d41F8B796fb6aF275c9C0892F659) |
+| **AgentVerifier** (on-chain LLM proof check) | [`0x01E09E5dd50A332a7C2CA597e5F202EA9794A655`](https://shannon-explorer.somnia.network/address/0x01E09E5dd50A332a7C2CA597e5F202EA9794A655) |
 
 Network: Somnia Testnet (Shannon) · chainId `50312` · RPC `https://dream-rpc.somnia.network` · currency STT.
 

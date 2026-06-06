@@ -7,6 +7,7 @@
 const { parseJob } = require("./parseJob");
 const { recommendWorkers } = require("./recommend");
 const { visionCheck } = require("./visionCheck");
+const { available: onchainAvailable, verifyProofSmart } = require("./onchainVerify");
 const { sendJobEmail } = require("./notify");
 const { lockEscrow, releasePayment, refundClient, recordProof, verifyDeposit } = require("./executor");
 const { txUrl } = require("../lib/somnia");
@@ -106,10 +107,26 @@ async function confirmJob(jobUuid, job, worker, meta = {}) {
  */
 async function submitProof(jobUuid, job, proofText, photoUrl) {
   const steps = [];
-  const ai = await visionCheck(job, proofText, photoUrl);
   steps.push(await log(jobUuid, "proof_submitted", { hasPhoto: !!photoUrl, note: proofText }));
+
+  // Photo screening via GPT-4o vision (Somnia's LLM is text-only).
+  const ai = await visionCheck(job, proofText, photoUrl);
   steps.push(await log(jobUuid, "ai_prechecked", ai));
-  return { ai, steps };
+
+  // Text verdict via Somnia's ON-CHAIN LLM agent (consensus-validated) when
+  // enabled — this is the agent-native, on-chain AI check. Falls back to GPT-4o.
+  let onchain = null;
+  if (onchainAvailable()) {
+    try {
+      const r = await verifyProofSmart(jobUuid, job, proofText);
+      onchain = { decision: r.decision, source: r.source, txUrl: r.txUrl || null };
+      steps.push(await log(jobUuid, "onchain_verified", onchain));
+    } catch (e) {
+      // advisory only — never block submission
+    }
+  }
+
+  return { ai, onchain, steps };
 }
 
 /**

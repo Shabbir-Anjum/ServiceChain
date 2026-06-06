@@ -30,6 +30,7 @@ export const STEP_MAP = Object.fromEntries([
   { key: "worker_emailed", icon: "📧", label: "Worker emailed", status: "info" },
   { key: "proof_submitted", icon: "📸", label: "Proof submitted", status: "info" },
   { key: "ai_prechecked", icon: "👁️", label: "AI pre-check", status: "info" },
+  { key: "onchain_verified", icon: "⛓️", label: "On-chain LLM verdict (Somnia)", status: "violet" },
 ].map((s) => [s.key, s]));
 
 // Map a job status -> pill variant + label. (Worker-facing label differs.)
