@@ -22,7 +22,7 @@ function available() {
  *   { decision, source:"somnia-onchain", txUrl, raw } on success
  * Throws on timeout/failure (caller falls back).
  */
-async function verifyOnChain(jobUuid, job, proofText, { timeoutMs = 25000 } = {}) {
+async function verifyOnChain(jobUuid, job, proofText, vision, { timeoutMs = 25000 } = {}) {
   if (!ADDR) throw new Error("AGENT_VERIFIER_ADDRESS not set");
   const wallet = getAgentWallet();
   const verifier = new ethers.Contract(ADDR, AGENT_VERIFIER_ABI, wallet);
@@ -37,7 +37,16 @@ async function verifyOnChain(jobUuid, job, proofText, { timeoutMs = 25000 } = {}
   const deposit = reserve + PER_AGENT * SUBCOMMITTEE; // ≈ 0.24 STT
 
   const summary = (job?.summary || "service job").slice(0, 400);
-  const proof = String(proofText || "").slice(0, 800);
+  // The on-chain LLM is text-only and can't see the photo. Fold in the vision
+  // pre-check as PHOTO EVIDENCE so its verdict reflects what the image shows
+  // (e.g. an unrelated photo → rejected, instead of trusting the note alone).
+  let proof = String(proofText || "");
+  if (vision && vision.notes && vision.looksConsistent !== null) {
+    proof += `\n\nPHOTO EVIDENCE (from an image analysis of the worker's proof photo): ` +
+      `${vision.looksConsistent ? "the photo appears to match the job" : "the photo does NOT match the job"}. ` +
+      `Details: ${vision.notes}`;
+  }
+  proof = proof.slice(0, 800);
 
   // Fire the request (pays the validator subcommittee enough to actually run).
   const tx = await verifier.verifyProof(jobId, summary, proof, { value: deposit });
@@ -63,10 +72,10 @@ async function verifyOnChain(jobUuid, job, proofText, { timeoutMs = 25000 } = {}
  * Verify a proof, preferring Somnia's on-chain LLM when enabled, else GPT-4o.
  * Always returns { decision, confidence, reason, source }.
  */
-async function verifyProofSmart(jobUuid, job, proofText) {
+async function verifyProofSmart(jobUuid, job, proofText, vision) {
   if (available()) {
     try {
-      const r = await verifyOnChain(jobUuid, job, proofText);
+      const r = await verifyOnChain(jobUuid, job, proofText, vision);
       return {
         decision: r.decision,
         confidence: 0.9,

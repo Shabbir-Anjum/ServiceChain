@@ -118,7 +118,9 @@ async function submitProof(jobUuid, job, proofText, photoUrl) {
   let onchain = null;
   if (onchainAvailable()) {
     try {
-      const r = await verifyProofSmart(jobUuid, job, proofText);
+      // Pass the vision result as evidence so the text-only on-chain LLM can
+      // account for what the photo actually shows (it can't see the image itself).
+      const r = await verifyProofSmart(jobUuid, job, proofText, ai);
       onchain = { decision: r.decision, source: r.source, txUrl: r.txUrl || null };
       steps.push(await log(jobUuid, "onchain_verified", onchain));
     } catch (e) {
