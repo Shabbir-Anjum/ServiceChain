@@ -16,7 +16,7 @@ function LoginInner() {
   const params = useSearchParams();
   const [supabase] = useState(() => createClient());
 
-  const [mode, setMode] = useState("login"); // login | signup
+  const [mode, setMode] = useState("login"); // login | signup | forgot
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -39,6 +39,13 @@ function LoginInner() {
         if (error) throw error;
         router.push(next);
         router.refresh();
+      } else if (mode === "forgot") {
+        // Email a recovery link. It lands on /auth/callback, which exchanges the
+        // code for a session and forwards to /reset-password to set a new one.
+        const redirectTo = `${window.location.origin}/auth/callback?next=/reset-password`;
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+        if (error) throw error;
+        setNotice("If an account exists for that email, a password-reset link is on its way. Check your inbox.");
       } else {
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -67,16 +74,18 @@ function LoginInner() {
       <div className="glass-card glass-card--accent auth__card">
         <div className="center" style={{ marginBottom: "var(--s-5)" }}>
           <div className="postresult__orb" aria-hidden="true" style={{ margin: "0 auto var(--s-3)" }}>✦</div>
-          <h2 style={{ margin: 0 }}>{mode === "login" ? "Welcome back" : "Create your account"}</h2>
+          <h2 style={{ margin: 0 }}>{mode === "login" ? "Welcome back" : mode === "forgot" ? "Reset your password" : "Create your account"}</h2>
           <p className="muted" style={{ marginTop: 6 }}>
-            {mode === "login" ? "Log in to ServiceChain" : "Join as a client or a worker"}
+            {mode === "login" ? "Log in to ServiceChain" : mode === "forgot" ? "Enter your email and we'll send a reset link" : "Join as a client or a worker"}
           </p>
         </div>
 
-        <div className="auth__tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={mode === "login"} className={`auth__tab ${mode === "login" ? "is-active" : ""}`} onClick={() => setMode("login")}>Log in</button>
-          <button type="button" role="tab" aria-selected={mode === "signup"} className={`auth__tab ${mode === "signup" ? "is-active" : ""}`} onClick={() => setMode("signup")}>Sign up</button>
-        </div>
+        {mode !== "forgot" && (
+          <div className="auth__tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={mode === "login"} className={`auth__tab ${mode === "login" ? "is-active" : ""}`} onClick={() => { setMode("login"); setError(null); setNotice(null); }}>Log in</button>
+            <button type="button" role="tab" aria-selected={mode === "signup"} className={`auth__tab ${mode === "signup" ? "is-active" : ""}`} onClick={() => { setMode("signup"); setError(null); setNotice(null); }}>Sign up</button>
+          </div>
+        )}
 
         <form onSubmit={submit} aria-busy={busy} className="stack gap-4" style={{ marginTop: "var(--s-4)" }}>
           {mode === "signup" && (
@@ -99,6 +108,7 @@ function LoginInner() {
             <label className="label" htmlFor="email">Email</label>
             <input id="email" type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
           </div>
+          {mode !== "forgot" && (
           <div className="field">
             <label className="label" htmlFor="password">Password</label>
             <div className="pw-wrap">
@@ -117,21 +127,40 @@ function LoginInner() {
                 )}
               </button>
             </div>
+            {mode === "login" && (
+              <div style={{ textAlign: "right", marginTop: 6 }}>
+                <button type="button" className="auth__link" onClick={() => { setMode("forgot"); setError(null); setNotice(null); }}>
+                  Forgot password?
+                </button>
+              </div>
+            )}
           </div>
+          )}
 
           {error && <div className="pill is-danger"><span aria-hidden="true">⚠</span> {error}</div>}
           {notice && <div className="pill is-info">{notice}</div>}
 
           <button type="submit" className="btn btn-primary btn-block btn-lg" disabled={busy}>
-            {busy ? <><span className="spinner" /> Please wait…</> : mode === "login" ? "Log in" : "Create account"}
+            {busy ? <><span className="spinner" /> Please wait…</> : mode === "login" ? "Log in" : mode === "forgot" ? "Send reset link" : "Create account"}
           </button>
         </form>
 
         <p className="hint center" style={{ marginTop: "var(--s-4)" }}>
-          {mode === "login" ? "New here? " : "Already have an account? "}
-          <button type="button" className="auth__link" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(null); }}>
-            {mode === "login" ? "Create an account" : "Log in"}
-          </button>
+          {mode === "forgot" ? (
+            <>
+              Remembered it?{" "}
+              <button type="button" className="auth__link" onClick={() => { setMode("login"); setError(null); setNotice(null); }}>
+                Back to log in
+              </button>
+            </>
+          ) : (
+            <>
+              {mode === "login" ? "New here? " : "Already have an account? "}
+              <button type="button" className="auth__link" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(null); setNotice(null); }}>
+                {mode === "login" ? "Create an account" : "Log in"}
+              </button>
+            </>
+          )}
         </p>
       </div>
     </section>
