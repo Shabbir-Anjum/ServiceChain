@@ -6,7 +6,7 @@
 
 **An AI service marketplace with non-custodial escrow & proof-of-work, built on Somnia.**
 
-Somnia Agentathon 2026 · `[ live demo URL ]` · [Somnia Explorer](https://shannon-explorer.somnia.network)
+Somnia Agentathon 2026 · `[ https://youtu.be/QPzme9i3Qyw ]` · [Somnia Explorer](https://shannon-explorer.somnia.network)
 
 </div>
 
@@ -60,17 +60,6 @@ Service marketplaces run on blind trust: the client pays first and hopes, or the
 | **AgentVerifier** (on-chain LLM proof check) | [`0x01E09E5dd50A332a7C2CA597e5F202EA9794A655`](https://shannon-explorer.somnia.network/address/0x01E09E5dd50A332a7C2CA597e5F202EA9794A655) |
 
 Network: Somnia Testnet (Shannon) · chainId `50312` · RPC `https://dream-rpc.somnia.network` · currency STT.
-
----
-
-## 🎬 Demo in 30 seconds
-
-1. **Client** posts: *"Fix my leaking kitchen sink urgently in Lahore."*
-2. Agent recommends **Ali Raza ($75)** + a cheaper option, and **negotiates**.
-3. Client confirms → **pays escrow via MetaMask** (real Somnia tx) → worker emailed.
-4. **Worker** submits a **photo proof** → AI pre-checks → *"awaiting client approval."*
-5. **Client** approves on the dashboard → **payment released** + **proof recorded on-chain**.
-
 ---
 
 ## 🔑 Test accounts
